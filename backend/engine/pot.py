@@ -25,6 +25,18 @@ class Pot:
             raise ValueError("A player cannot appear twice in a pot's eligible list.")
 
 
+@dataclass(frozen=True, slots=True)
+class PotAward:
+    """Auditable settlement for one contribution layer."""
+
+    label: str
+    amount: int
+    eligible_player_ids: tuple[str, ...]
+    winner_ids: tuple[str, ...]
+    payouts: tuple[tuple[str, int], ...]
+    refund_to: str | None = None
+
+
 class PotManager:
     """Build pots from hand contributions and divide them at showdown.
 
@@ -120,3 +132,47 @@ class PotManager:
                     payouts[winner] += 1
                     odd_chips -= 1
         return payouts
+
+    @staticmethod
+    def award_with_details(
+        pots: Sequence[Pot],
+        hand_rankings: Mapping[str, object],
+        players: Sequence[Player],
+        button_index: int,
+    ) -> tuple[dict[str, int], tuple[PotAward, ...]]:
+        """Award every layer and preserve its winners and per-player shares."""
+        total_payouts = {player.id: 0 for player in players}
+        awards: list[PotAward] = []
+        seat_order = [player.id for player in players]
+        odd_chip_order = seat_order[button_index + 1 :] + seat_order[: button_index + 1]
+        for pot in pots:
+            if pot.refund_to is not None:
+                shares = {pot.refund_to: pot.amount}
+                winners = (pot.refund_to,)
+            else:
+                if not pot.eligible_player_ids:
+                    raise ValueError(f"{pot.label} has no eligible players.")
+                missing = [player_id for player_id in pot.eligible_player_ids if player_id not in hand_rankings]
+                if missing:
+                    raise ValueError(f"Missing showdown rank for eligible player(s): {', '.join(missing)}.")
+                best_rank = min(hand_rankings[player_id] for player_id in pot.eligible_player_ids)
+                winners = tuple(player_id for player_id in pot.eligible_player_ids if hand_rankings[player_id] == best_rank)
+                share, odd_chips = divmod(pot.amount, len(winners))
+                shares = {player_id: share for player_id in winners}
+                for player_id in odd_chip_order:
+                    if odd_chips == 0:
+                        break
+                    if player_id in shares:
+                        shares[player_id] += 1
+                        odd_chips -= 1
+            for player_id, amount in shares.items():
+                total_payouts[player_id] += amount
+            awards.append(PotAward(
+                label=pot.label,
+                amount=pot.amount,
+                eligible_player_ids=pot.eligible_player_ids,
+                winner_ids=winners,
+                payouts=tuple((player_id, shares[player_id]) for player_id in seat_order if player_id in shares),
+                refund_to=pot.refund_to,
+            ))
+        return total_payouts, tuple(awards)

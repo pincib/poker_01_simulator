@@ -3,46 +3,53 @@
 from __future__ import annotations
 
 from threading import RLock
-from typing import Any
 
 from backend.brain.ai_agent import OpponentAI, OpponentProfile
 from backend.brain.coach import CoachService, CoachSnapshot, DecisionNote, SessionTracker
-from backend.engine.evaluator import HandEvaluator
 from backend.engine.game_state import ActionType, GameState, Street
 from backend.engine.player import Player
+from backend.engine.rules import BettingStructure, GameRules, GameVariant
 
 
 class TrainingTable:
-    """Process-local Hold'em table for one player and five profile-driven bots."""
+    """Process-local variant-aware table for one player and five profile-driven bots."""
 
     hero_id = "hero"
     starting_stack = 200
     small_blind = 1
     big_blind = 2
 
-    def __init__(self, session_tracker: SessionTracker) -> None:
+    def __init__(
+        self,
+        session_tracker: SessionTracker,
+        default_variant: GameVariant | str = GameVariant.TEXAS_HOLDEM,
+    ) -> None:
         self._tracker = session_tracker
+        self._variant = _resolve_variant(default_variant)
         self._lock = RLock()
         self._state: GameState | None = None
         self._stacks = [self.starting_stack] * 6
         self._button_index = 0
         self._hand_number = 0
         self._decisions: list[DecisionNote] = []
+        self._last_decision_feedback: str | None = None
         self._recorded = False
         self._coach_cache_key: tuple[object, ...] | None = None
         self._coach_cache: CoachSnapshot | None = None
         self._bots = {
             f"bot-{index}": OpponentAI(profile, equity_iterations=96)
             for index, profile in enumerate(
-                (OpponentProfile.TAG, OpponentProfile.NIT, OpponentProfile.STATION, OpponentProfile.GTO, OpponentProfile.TAG),
+                (OpponentProfile.TAG, OpponentProfile.NIT, OpponentProfile.STATION, OpponentProfile.BALANCED, OpponentProfile.TAG),
                 start=1,
             )
         }
 
-    def start_hand(self) -> dict[str, object]:
+    def start_hand(self, variant: GameVariant | str | None = None) -> dict[str, object]:
         with self._lock:
             if self._state is not None and not self._state.hand_complete:
                 raise ValueError("Finish the current hand before dealing another.")
+            selected_variant = self._variant if variant is None else _resolve_variant(variant)
+            rules = _rules_for(selected_variant)
             # A practice table supports a fresh buy-in after a player loses the stack.
             if self._stacks[0] <= 0:
                 self._stacks[0] = self.starting_stack
@@ -51,16 +58,19 @@ class TrainingTable:
                     self._stacks[index] = self.starting_stack
             players = (Player(self.hero_id, "You", self._stacks[0]),) + tuple(
                 Player(f"bot-{index}", name, self._stacks[index])
-                for index, name in enumerate(("Aggro Alex", "Nitty Norman", "Calling Kevin", "Solver Sam", "Aggro Alex"), start=1)
+                for index, name in enumerate(("Aggro Alex", "Nitty Norman", "Calling Kevin", "Balanced Blair", "Aggro Alex"), start=1)
             )
             self._state = GameState.new_hand(
                 players,
                 self.small_blind,
                 self.big_blind,
                 self._button_index,
+                rules=rules,
             )
+            self._variant = selected_variant
             self._hand_number += 1
             self._decisions = []
+            self._last_decision_feedback = None
             self._recorded = False
             self._coach_cache_key = None
             self._coach_cache = None
@@ -70,14 +80,29 @@ class TrainingTable:
             self._record_if_complete()
             return self.snapshot()
 
-    def act(self, action_value: object, amount_value: object = None) -> dict[str, object]:
+    def act(
+        self,
+        action_value: object,
+        amount_value: object = None,
+        *,
+        variant: GameVariant | str | None = None,
+    ) -> dict[str, object]:
         with self._lock:
             state = self._require_state()
+            if variant is not None and _resolve_variant(variant) is not state.rules.variant:
+                raise ValueError("Action variant does not match the active hand; variant cannot change mid-hand.")
             if state.current_player_id != self.hero_id:
                 raise ValueError("It is not your turn yet.")
             if not isinstance(action_value, str):
                 raise ValueError("Action must be a string.")
-            action = ActionType(action_value)
+            try:
+                action = ActionType(action_value)
+            except ValueError as exc:
+                raise ValueError(f"Unknown action '{action_value}'.") from exc
+            if amount_value is not None and action not in (ActionType.BET, ActionType.RAISE):
+                raise ValueError("amount is only accepted for bet or raise actions.")
+            if amount_value is not None and (not isinstance(amount_value, int) or isinstance(amount_value, bool)):
+                raise ValueError("Bet and raise amounts must be integer chip totals.")
             hero = state.player_by_id(self.hero_id)
             assert hero is not None
             pot_before = state.pot
@@ -92,6 +117,13 @@ class TrainingTable:
                 except ValueError as exc:
                     # Coaching must never prevent a legal poker action.
                     coach_error = str(exc)
+            process_feedback = _process_feedback(
+                action,
+                coach,
+                call_amount=call_amount,
+                target=amount_value if isinstance(amount_value, int) else None,
+            )
+            self._last_decision_feedback = process_feedback
             if coach is not None and len(active_opponents) == 1:
                 if action in (ActionType.BET, ActionType.RAISE, ActionType.ALL_IN):
                     target = amount_value if isinstance(amount_value, int) else hero.current_bet + hero.stack
@@ -116,8 +148,9 @@ class TrainingTable:
                     pot_before=pot_before,
                     rationale=coach_error or "No opponent model was available when this decision was made.",
                     review_question="What range and future-street plan support this decision?",
+                    variant=state.rules.variant.value,
+                    process_feedback=process_feedback,
                 ))
-            before_count = len(self._decisions)
             if coach is not None:
                 chips = call_amount if action is ActionType.CALL else (
                     max(0, int(amount_value or 0) - hero.current_bet)
@@ -131,12 +164,29 @@ class TrainingTable:
                     pot_before=pot_before,
                     equity_percentage=coach.equity_percentage,
                     pot_odds_percentage=coach.pot_odds_percentage,
-                    ev_call=coach.ev_call if action is ActionType.CALL else None,
+                    ev_call=coach.ev_call if action in (ActionType.CALL, ActionType.ALL_IN) else None,
                     bet_purpose=bet_purpose,
-                    facing_cbet=state.street is not Street.PREFLOP and call_amount > 0,
+                    facing_cbet=(
+                        state.street is not Street.PREFLOP and call_amount > 0
+                        and state.rules.variant.value == "texas_holdem"
+                    ),
                     out_of_position=hero.position is not None and hero.position.value not in ("BTN", "CO"),
                     rationale=coach.advice,
-                    review_question="Was the estimated range accurate, and what alternative did you consider?",
+                    review_question=(
+                        coach.learning_steps[-1]["body"] if coach.learning_steps else
+                        "What range assumption and future-street plan mattered most?"
+                    ),
+                    variant=state.rules.variant.value,
+                    equity_source=coach.equity_source,
+                    equity_iterations=coach.iterations,
+                    opponent_range_size=coach.opponent_range_size,
+                    range_description=coach.range_description,
+                    estimation_seed=coach.seed,
+                    deterministic=coach.deterministic,
+                    limitations=coach.limitations,
+                    draw_analysis=coach.draw_analysis,
+                    learning_steps=coach.learning_steps,
+                    process_feedback=process_feedback,
                 ))
             amount = amount_value if action in (ActionType.BET, ActionType.RAISE) else None
             self._state = state.apply_action(self.hero_id, action, amount)
@@ -205,17 +255,31 @@ class TrainingTable:
                         coach_note = str(exc)
                 else:
                     coach_note = "No active opponent is available for an equity estimate."
-            min_raise = state.current_bet + state.last_full_raise_size
-            max_raise = hero.current_bet + hero.stack
+            bet_bounds = state.betting_bounds(hero.id)
+            min_raise = bet_bounds["minimum_raise_to"] or (state.current_bet + state.last_full_raise_size)
+            max_raise = bet_bounds["maximum_raise_to"] or (hero.current_bet + hero.stack)
             spr_value = None
             if hero.is_active and not state.hand_complete and len(active_opponents) == 1 and state.pot > 0:
                 spr_value = min(hero.stack, active_opponents[0].stack) / state.pot
             last_action = state.action_history[-1] if state.action_history else None
+            variant_label = "Pot-Limit Omaha" if state.rules.variant is GameVariant.POT_LIMIT_OMAHA else "Texas Hold’em"
             return {
                 "started": True,
                 "hand_number": self._hand_number,
-                "variant": "Texas Hold’em",
-                "table_label": "6-max · No-limit · $1/$2",
+                # Keep the original display-valued field and expose a stable enum for API clients.
+                "variant": variant_label,
+                "variant_id": state.rules.variant.value,
+                "variant_label": variant_label,
+                "betting_structure": state.rules.betting_structure.value,
+                "hole_card_count": state.rules.hole_card_count,
+                "rules": {
+                    "variant": state.rules.variant.value,
+                    "betting_structure": state.rules.betting_structure.value,
+                    "hole_card_count": state.rules.hole_card_count,
+                    "min_players": state.rules.min_players,
+                    "max_players": state.rules.max_players,
+                },
+                "table_label": f"6-max · {'Pot-limit' if state.rules.betting_structure is BettingStructure.POT_LIMIT else 'No-limit'} · $1/$2",
                 "small_blind": self.small_blind,
                 "big_blind": self.big_blind,
                 "street": display_street.value,
@@ -231,12 +295,36 @@ class TrainingTable:
                 "current_bet": state.current_bet,
                 "spr_value": spr_value,
                 "legal_actions": [action.value for action in legal],
+                "betting_limits": {
+                    "minimum_raise_to": bet_bounds["minimum_raise_to"],
+                    "maximum_raise_to": bet_bounds["maximum_raise_to"],
+                    "amount_to_call": bet_bounds["amount_to_call"],
+                    "all_in_to": bet_bounds["all_in_to"],
+                },
                 "raise_min": min_raise,
                 "raise_max": max_raise,
+                "amount_to_call": bet_bounds["amount_to_call"],
+                "all_in_to": bet_bounds["all_in_to"],
                 "can_start_next": state.hand_complete,
                 "hand_complete": state.hand_complete,
                 "winners": list(state.winners),
                 "payouts": dict(state.payouts),
+                "showdown_ranks": dict(state.showdown_ranks),
+                "winning_hands": {
+                    player_id: [card.code for card in cards]
+                    for player_id, cards in state.winning_hands
+                },
+                "pot_awards": [
+                    {
+                        "label": award.label,
+                        "amount": award.amount,
+                        "eligible_player_ids": list(award.eligible_player_ids),
+                        "winner_ids": list(award.winner_ids),
+                        "payouts": dict(award.payouts),
+                        "refund_to": award.refund_to,
+                    }
+                    for award in state.pot_awards
+                ],
                 "outcome": self._outcome(state),
                 "last_action": None if last_action is None else {
                     "player_id": last_action.player_id,
@@ -246,6 +334,7 @@ class TrainingTable:
                 "coach": coach_snapshot,
                 "coach_note": coach_note,
                 "coach_context": coach_context,
+                "coach_feedback": self._last_decision_feedback,
                 "multiway": len(active_opponents) > 1,
             }
 
@@ -268,12 +357,7 @@ class TrainingTable:
     def _resolve_showdown(self) -> None:
         state = self._require_state()
         if state.street is Street.SHOWDOWN and not state.hand_complete:
-            rankings = {
-                player.id: HandEvaluator.evaluate_7(player.hole_cards + state.community_cards)
-                for player in state.players
-                if player.is_active
-            }
-            state = state.resolve_showdown(rankings)
+            state = state.resolve_showdown()
             self._state = state
 
     def _record_if_complete(self) -> None:
@@ -304,7 +388,8 @@ class TrainingTable:
         )
         if key != self._coach_cache_key or self._coach_cache is None:
             self._coach_cache = CoachService.analyze_state(
-                state, self.hero_id, opponent.id if opponent else None, iterations=256
+                state, self.hero_id, opponent.id if opponent else None, iterations=256,
+                seed=(self._hand_number * 1_000_003 + len(state.action_history)) % (2**32),
             )
             self._coach_cache_key = key
         return self._coach_cache
@@ -320,3 +405,68 @@ class TrainingTable:
         if self.hero_id in state.winners:
             return f"You won ${hero_payout:.2f}" if len(state.winners) == 1 else f"Split pot · ${hero_payout:.2f} to you"
         return "Hand complete · the pot went to your opponent"
+
+
+def _resolve_variant(value: GameVariant | str) -> GameVariant:
+    if not isinstance(value, (str, GameVariant)):
+        raise ValueError("variant must be 'texas_holdem' or 'pot_limit_omaha'.")
+    try:
+        return GameVariant(value)
+    except ValueError as exc:
+        raise ValueError(
+            f"Unsupported variant '{value}'. Supported variants: texas_holdem, pot_limit_omaha."
+        ) from exc
+
+
+def _rules_for(variant: GameVariant) -> GameRules:
+    if variant is GameVariant.POT_LIMIT_OMAHA:
+        return GameRules.pot_limit_omaha()
+    return GameRules.texas_holdem()
+
+
+def _process_feedback(
+    action: ActionType,
+    coach: CoachSnapshot | None,
+    *,
+    call_amount: int,
+    target: int | None,
+) -> str:
+    if coach is None:
+        return (
+            "Your action followed the table rules. In review, note the range, price, and future-street plan you used; "
+            "the hand result alone cannot grade that reasoning."
+        )
+    if action in (ActionType.CALL, ActionType.FOLD) and call_amount > 0 and coach.pot_odds_percentage is not None:
+        gap = coach.equity_percentage - coach.pot_odds_percentage
+        if gap > 0:
+            relation = f"The modeled equity was {gap:.1f} points above the immediate call price."
+        elif gap < 0:
+            relation = f"The modeled equity was {abs(gap):.1f} points below the immediate call price."
+        else:
+            relation = "The modeled equity was at the immediate call price."
+        if action is ActionType.CALL:
+            return (
+                f"You called. {relation} Check whether the range assumption and later-street plan support that choice; "
+                "this is a reasoning checkpoint, not a verdict from the hand's result."
+            )
+        return (
+            f"You folded before paying the call. {relation} If your read differed from the model, compare that read "
+            "with the range in review; the result does not grade the choice."
+        )
+    if action is ActionType.CHECK:
+        return (
+            "You checked with no call price. In review, ask whether a weaker hand could call for value or a better hand "
+            "could fold; checking can also keep the pot manageable."
+        )
+    if action in (ActionType.BET, ActionType.RAISE):
+        total = f" to {target} chips" if target is not None else ""
+        return (
+            f"The server accepted your legal {action.value}{total}. Equity for a call does not by itself justify a bet; "
+            "review what worse hands could continue or better hands could fold."
+        )
+    if action is ActionType.ALL_IN:
+        return (
+            "The server accepted this all-in under the hand rules. Legal does not mean automatically best: review the "
+            "price, effective stack, range, and remaining redraw risk."
+        )
+    return "You folded. In review, compare the range you assigned with the price and plan you had in mind."

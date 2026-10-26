@@ -9,7 +9,9 @@ from typing import Mapping, Sequence
 from backend.engine.card import Card
 from backend.engine.deck import Deck
 from backend.engine.player import Player, Position
-from backend.engine.pot import PotManager
+from backend.engine.pot import PotAward, PotManager
+from backend.engine.rules import GameRules, GameVariant
+from backend.engine.pot_limit import PotLimitBetSizer
 
 
 class Street(str, Enum):
@@ -36,6 +38,7 @@ class ActionRecord:
     action: ActionType
     chips: int
     bet_to: int
+    variant: GameVariant = GameVariant.TEXAS_HOLDEM
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,6 +50,7 @@ class GameState:
     """
 
     players: tuple[Player, ...]
+    rules: GameRules
     button_index: int
     small_blind: int
     big_blind: int
@@ -59,24 +63,37 @@ class GameState:
     deck_cursor: int = field(repr=False)
     burned_cards: tuple[Card, ...] = ()
     acted_since_full_raise: frozenset[str] = frozenset()
+    acted_bet_levels: tuple[tuple[str, int], ...] = ()
     action_history: tuple[ActionRecord, ...] = ()
     hand_complete: bool = False
     payouts: tuple[tuple[str, int], ...] = ()
     winners: tuple[str, ...] = ()
+    showdown_ranks: tuple[tuple[str, int], ...] = ()
+    winning_hands: tuple[tuple[str, tuple[Card, ...]], ...] = ()
+    pot_awards: tuple[PotAward, ...] = ()
 
     def __post_init__(self) -> None:
+        if not isinstance(self.rules, GameRules):
+            raise ValueError("Game state requires an explicit GameRules configuration.")
         object.__setattr__(self, "players", tuple(self.players))
         object.__setattr__(self, "community_cards", tuple(self.community_cards))
         object.__setattr__(self, "pending_action_ids", tuple(self.pending_action_ids))
         object.__setattr__(self, "deck_order", tuple(self.deck_order))
         object.__setattr__(self, "burned_cards", tuple(self.burned_cards))
         object.__setattr__(self, "acted_since_full_raise", frozenset(self.acted_since_full_raise))
+        object.__setattr__(self, "acted_bet_levels", tuple(self.acted_bet_levels))
         object.__setattr__(self, "action_history", tuple(self.action_history))
         object.__setattr__(self, "payouts", tuple(self.payouts))
         object.__setattr__(self, "winners", tuple(self.winners))
+        object.__setattr__(self, "showdown_ranks", tuple(self.showdown_ranks))
+        object.__setattr__(self, "winning_hands", tuple((player_id, tuple(cards)) for player_id, cards in self.winning_hands))
+        object.__setattr__(self, "pot_awards", tuple(self.pot_awards))
         object.__setattr__(self, "street", Street(self.street))
-        if not 2 <= len(self.players) <= 6:
-            raise ValueError("A Hold'em table must have between 2 and 6 players.")
+        if not self.rules.min_players <= len(self.players) <= self.rules.max_players:
+            raise ValueError(
+                f"{self.rules.variant.value} table must have between "
+                f"{self.rules.min_players} and {self.rules.max_players} players."
+            )
         player_ids = [player.id for player in self.players]
         if len(player_ids) != len(set(player_ids)):
             raise ValueError("Player ids must be unique in a hand.")
@@ -105,9 +122,16 @@ class GameState:
             raise ValueError("Deck cursor is outside the deck.")
         dealt = list(self.community_cards) + list(self.burned_cards)
         for player in self.players:
+            if player.hole_cards and len(player.hole_cards) != self.rules.hole_card_count:
+                raise ValueError(
+                    f"{self.rules.variant.value} requires exactly "
+                    f"{self.rules.hole_card_count} hole cards per player."
+                )
             dealt.extend(player.hole_cards)
         if len(dealt) != len(set(dealt)):
             raise ValueError("A card cannot appear in more than one hand or board location.")
+        if len(dealt) > self.deck_cursor:
+            raise ValueError("Dealt cards cannot exceed the deck cursor.")
         if any(card not in self.deck_order for card in dealt):
             raise ValueError("Every dealt card must come from this hand's deck.")
         if len(dealt) != self.deck_cursor:
@@ -127,11 +151,18 @@ class GameState:
         button_index: int = 0,
         *,
         deck: Deck | None = None,
+        rules: GameRules | None = None,
     ) -> GameState:
-        """Create a shuffled hand, deal two cards, and post table-stakes blinds."""
+        """Create a shuffled hand using the selected variant's hole-card rules."""
         players = tuple(players)
-        if not 2 <= len(players) <= 6:
-            raise ValueError("A Hold'em table must have between 2 and 6 players.")
+        rules = rules or GameRules.texas_holdem()
+        if not isinstance(rules, GameRules):
+            raise ValueError("rules must be a GameRules instance.")
+        if not rules.min_players <= len(players) <= rules.max_players:
+            raise ValueError(
+                f"{rules.variant.value} table must have between "
+                f"{rules.min_players} and {rules.max_players} players."
+            )
         if not isinstance(small_blind, int) or isinstance(small_blind, bool) or small_blind <= 0:
             raise ValueError("Small blind must be a positive integer.")
         if not isinstance(big_blind, int) or isinstance(big_blind, bool) or big_blind < small_blind:
@@ -142,6 +173,8 @@ class GameState:
             raise ValueError("Player ids must be unique in a hand.")
         if any(player.stack <= 0 for player in players):
             raise ValueError("Every seated player must have a positive stack to start a hand.")
+        if len(players) * rules.hole_card_count + 8 > 52:
+            raise ValueError("The selected table size and hole-card count exceed the deck capacity.")
         if deck is None:
             deck = Deck()
         deck_order = tuple(reversed(deck.cards))
@@ -173,7 +206,7 @@ class GameState:
         deal_order = tuple((first_deal + offset) % len(players) for offset in range(len(players)))
         cursor = 0
         hole_cards: list[list[Card]] = [[] for _ in players]
-        for _ in range(2):
+        for _ in range(rules.hole_card_count):
             for seat in deal_order:
                 hole_cards[seat].append(deck_order[cursor])
                 cursor += 1
@@ -193,6 +226,7 @@ class GameState:
         pending = cls._clockwise_ids(hand_players, first_actor, only_can_act=True)
         state = cls(
             players=tuple(hand_players),
+            rules=rules,
             button_index=button_index,
             small_blind=small_blind,
             big_blind=big_blind,
@@ -246,19 +280,48 @@ class GameState:
         actions = [ActionType.FOLD]
         to_call = max(0, self.current_bet - player.current_bet)
         can_raise = self._has_raise_right(player.id) and self._has_opponent_with_chips(player.id)
+        bounds = self.betting_bounds()
         if to_call == 0:
             actions.append(ActionType.CHECK)
-            if can_raise and player.stack > 0:
+            if can_raise and bounds["maximum_raise_to"] >= bounds["minimum_raise_to"]:
                 actions.append(ActionType.BET if self.current_bet == 0 else ActionType.RAISE)
         else:
             actions.append(ActionType.CALL)
-            if can_raise and player.stack > to_call:
+            if can_raise and bounds["maximum_raise_to"] >= bounds["minimum_raise_to"]:
                 actions.append(ActionType.RAISE)
         if player.stack > 0:
             all_in_to = player.current_bet + player.stack
-            if all_in_to <= self.current_bet or (can_raise and all_in_to > self.current_bet):
+            is_call_or_folded_raise = all_in_to <= self.current_bet
+            if is_call_or_folded_raise or (
+                can_raise
+                and all_in_to > self.current_bet
+                and (self.rules.betting_structure.value != "pot_limit" or all_in_to <= bounds["maximum_raise_to"])
+            ):
                 actions.append(ActionType.ALL_IN)
         return tuple(actions)
+
+    def betting_bounds(self, player_id: str | None = None) -> dict[str, int | None]:
+        """Return backend-authoritative street bet-to bounds for the actor."""
+        player = self.player_by_id(player_id) if player_id is not None else self.current_player
+        if player is None or not player.is_active or player.stack <= 0 or self.hand_complete:
+            return {"amount_to_call": 0, "minimum_raise_to": None, "maximum_raise_to": None, "all_in_to": None}
+        to_call = max(0, self.current_bet - player.current_bet)
+        all_in_to = player.current_bet + player.stack
+        minimum_raise_to = self.current_bet + self.last_full_raise_size
+        maximum_raise_to = all_in_to
+        if self.rules.betting_structure.value == "pot_limit":
+            maximum_raise_to = PotLimitBetSizer.maximum_raise_to(
+                self.pot,
+                to_call,
+                player_current_bet=player.current_bet,
+                player_stack=player.stack,
+            )
+        return {
+            "amount_to_call": min(to_call, player.stack),
+            "minimum_raise_to": minimum_raise_to,
+            "maximum_raise_to": maximum_raise_to,
+            "all_in_to": all_in_to,
+        }
 
     def apply_action(
         self,
@@ -315,11 +378,15 @@ class GameState:
                 raise ValueError("A bet or raise must exceed the current street bet.")
             if target_bet > actor.current_bet + actor.stack:
                 raise ValueError("Bet exceeds the player's remaining stack.")
+            bounds = self.betting_bounds(actor.id)
+            if self.rules.betting_structure.value == "pot_limit" and target_bet > int(bounds["maximum_raise_to"] or 0):
+                raise ValueError("Bet or raise exceeds the pot-limit maximum raise-to.")
             increase = target_bet - old_high_bet
             all_in = target_bet == actor.current_bet + actor.stack
             if action is ActionType.BET and target_bet < self.big_blind and not all_in:
                 raise ValueError("The minimum bet is one big blind.")
-            if increase < self.last_full_raise_size:
+            minimum_increase = self.last_full_raise_size if old_high_bet else self.big_blind
+            if increase < minimum_increase:
                 if not all_in:
                     raise ValueError("Raise is below the minimum and is not an all-in.")
                 short_raise = True
@@ -333,19 +400,38 @@ class GameState:
             if target_bet > old_high_bet:
                 if not self._has_raise_right(actor.id) or not self._has_opponent_with_chips(actor.id):
                     raise ValueError("This player's action cannot raise or reopen betting.")
+                bounds = self.betting_bounds(actor.id)
+                if self.rules.betting_structure.value == "pot_limit" and target_bet > int(bounds["maximum_raise_to"] or 0):
+                    raise ValueError("All-in raise exceeds the pot-limit maximum raise-to.")
                 increase = target_bet - old_high_bet
-                short_raise = increase < self.last_full_raise_size
+                minimum_increase = self.last_full_raise_size if old_high_bet else self.big_blind
+                short_raise = increase < minimum_increase
                 full_raise = not short_raise
             updated_actor = actor.commit(committed)
 
         updated_players = tuple(updated_actor if p.id == actor.id else p for p in self.players)
-        record = ActionRecord(actor.id, self.street, action, committed, target_bet)
+        record = ActionRecord(actor.id, self.street, action, committed, target_bet, self.rules.variant)
         acted = set(self.acted_since_full_raise)
         acted.add(actor.id)
+        bet_levels = dict(self.acted_bet_levels)
+        bet_levels.setdefault(actor.id, old_high_bet)
         last_full_raise_size = self.last_full_raise_size
         if full_raise:
             acted = {actor.id}
+            bet_levels = {actor.id: target_bet}
             last_full_raise_size = target_bet - old_high_bet
+        elif short_raise:
+            reopened = any(
+                player.id in self.acted_since_full_raise
+                and player.id in bet_levels
+                and target_bet - bet_levels[player.id] >= self.last_full_raise_size
+                for player in self.players
+            )
+            if reopened:
+                acted = {actor.id}
+                bet_levels = {actor.id: target_bet}
+            else:
+                bet_levels.setdefault(actor.id, old_high_bet)
 
         if full_raise or short_raise:
             pending = self._clockwise_ids(
@@ -364,6 +450,7 @@ class GameState:
             pending_action_ids=pending,
             last_full_raise_size=last_full_raise_size,
             acted_since_full_raise=frozenset(acted),
+            acted_bet_levels=tuple(bet_levels.items()),
             action_history=self.action_history + (record,),
         )
         if sum(1 for player in next_state.players if player.is_active) == 1:
@@ -455,6 +542,7 @@ class GameState:
                 pending_action_ids=pending,
                 last_full_raise_size=self.big_blind,
                 acted_since_full_raise=frozenset(),
+                acted_bet_levels=(),
             )
         next_state = replace(
             self,
@@ -467,6 +555,7 @@ class GameState:
             pending_action_ids=(),
             last_full_raise_size=self.big_blind,
             acted_since_full_raise=frozenset(),
+            acted_bet_levels=(),
         )
         return next_state._auto_progress()
 
@@ -489,8 +578,27 @@ class GameState:
             winners=(winner_id,),
         )
 
-    def resolve_showdown(self, hand_rankings: Mapping[str, object]) -> GameState:
-        """Award the main and side pots using lower-is-stronger hand ranks."""
+    def evaluate_showdown_hands(self) -> tuple[dict[str, int], dict[str, tuple[Card, ...]]]:
+        """Evaluate every active hand with the exact rules for this variant."""
+        from backend.engine.evaluator import HandEvaluator
+
+        if len(self.community_cards) != 5:
+            raise ValueError("Showdown evaluation requires a complete five-card board.")
+        rankings: dict[str, int] = {}
+        used_hands: dict[str, tuple[Card, ...]] = {}
+        for player in self.players:
+            if not player.is_active:
+                continue
+            if self.rules.variant is GameVariant.POT_LIMIT_OMAHA:
+                rank, used = HandEvaluator.evaluate_plo_with_hand(player.hole_cards, self.community_cards)
+            else:
+                rank, used = HandEvaluator.evaluate_7_with_hand(player.hole_cards + self.community_cards)
+            rankings[player.id] = rank
+            used_hands[player.id] = used
+        return rankings, used_hands
+
+    def resolve_showdown(self) -> GameState:
+        """Evaluate and award all pots using the variant-specific hand rules."""
         if self.street is not Street.SHOWDOWN or self.hand_complete:
             raise ValueError("The hand must be at an unresolved showdown.")
         active = [p for p in self.players if p.is_active]
@@ -498,8 +606,11 @@ class GameState:
             if len(active) == 1:
                 return self._finish_by_fold(active[0].id)
             raise ValueError("A showdown requires at least one active player.")
+        evaluated_rankings, used_hands = self.evaluate_showdown_hands()
         pots = PotManager.build_side_pots(self.players)
-        payouts = PotManager.award(pots, hand_rankings, self.players, self.button_index)
+        payouts, awards = PotManager.award_with_details(pots, evaluated_rankings, self.players, self.button_index)
+        if sum(payouts.values()) != self.pot:
+            raise RuntimeError("Showdown payouts must conserve every contributed chip.")
         paid_players = tuple(p.receive(payouts[p.id]) for p in self.players)
         winners = tuple(player.id for player in self.players if payouts[player.id] > 0)
         return replace(
@@ -510,4 +621,7 @@ class GameState:
             hand_complete=True,
             payouts=tuple((player.id, payouts[player.id]) for player in paid_players if payouts[player.id] > 0),
             winners=winners,
+            showdown_ranks=tuple((player_id, evaluated_rankings[player_id]) for player_id in evaluated_rankings),
+            winning_hands=tuple((player_id, used_hands[player_id]) for player_id in used_hands),
+            pot_awards=awards,
         )

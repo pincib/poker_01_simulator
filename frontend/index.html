@@ -34,10 +34,12 @@
           </div>
           <div class="game-select-wrap">
             <label for="game-variant">Game</label>
-            <select id="game-variant" disabled aria-describedby="variant-note">
+            <select id="game-variant" aria-describedby="variant-note variant-preview">
               <option value="texas_holdem">Texas Hold’em</option>
+              <option value="pot_limit_omaha">Pot-Limit Omaha</option>
             </select>
-            <span id="variant-note" class="visually-hidden">Texas Hold’em is playable now. Pot-Limit Omaha is planned for a later phase.</span>
+            <span id="variant-note" class="visually-hidden">Choose the rules for the next hand. The game cannot change during a hand.</span>
+            <p id="variant-preview" class="variant-preview" role="status" aria-live="polite"></p>
           </div>
         </section>
 
@@ -58,6 +60,8 @@
                   <div class="pot-strip">
                     <div class="pot-readout"><span>Pot</span><strong id="table-pot">$0.00</strong></div>
                     <span class="table-divider" aria-hidden="true"></span>
+                    <div class="pot-readout"><span>Blinds</span><strong id="table-blinds">$1/$2</strong></div>
+                    <span class="table-divider" aria-hidden="true"></span>
                     <div class="pot-readout"><span>SPR</span><strong id="table-spr">—</strong></div>
                     <span class="table-divider" aria-hidden="true"></span>
                     <div class="pot-readout"><span>Round</span><strong id="table-street">Waiting</strong></div>
@@ -75,7 +79,7 @@
             <section id="action-bar" class="action-bar" aria-label="Poker actions" hidden>
               <div class="action-context">
                 <strong id="action-prompt">Your action</strong>
-                <span id="action-hint">Space check · F fold · C call · B half-pot bet</span>
+                <span id="action-hint">Space check · F fold · C call · B size bet</span>
               </div>
               <div class="action-controls">
                 <button id="fold-button" class="action-button fold-button" type="button" data-action="fold">Fold <kbd>F</kbd></button>
@@ -84,14 +88,16 @@
                   <button class="size-button" type="button" data-pot-fraction="0.33">⅓ pot</button>
                   <button class="size-button selected" type="button" data-pot-fraction="0.5">½ pot <kbd>B</kbd></button>
                   <button class="size-button" type="button" data-pot-fraction="1">Pot</button>
+                  <button id="max-bet-button" class="size-button max-bet-button" type="button" aria-label="Set the maximum legal bet">Max</button>
                 </div>
                 <label class="size-input-wrap" for="raise-to-input">
-                  <span id="raise-to-label">Bet to</span>
+                  <span id="raise-to-label">Bet to total</span>
                   <input id="raise-to-input" type="number" inputmode="numeric" min="2" step="1" value="2">
                 </label>
                 <button id="bet-button" class="action-button bet-button" type="button" data-action="bet">Bet ½ pot</button>
                 <button id="all-in-button" class="action-button all-in-button" type="button" data-action="all_in">All-in</button>
               </div>
+              <p id="bet-limit-note" class="bet-limit-note" aria-live="polite"></p>
               <p id="action-status" class="action-status" role="status" aria-live="polite"></p>
             </section>
           </section>
@@ -105,23 +111,40 @@
 
             <div id="coach-content">
               <p id="coach-state" class="coach-state" role="status">Ready when you play</p>
+              <p id="coach-feedback" class="coach-feedback" role="status" aria-live="polite" hidden></p>
               <div id="coach-empty" class="coach-empty">
                 <div class="decision-mark" aria-hidden="true"><span></span><span></span><span></span></div>
-                <h3>Numbers at the decision</h3>
-                <p>Pot odds, estimated equity, and SPR appear here when a hand is connected.</p>
+                <h3>A guide for each decision</h3>
+                <p>When it is your turn, the coach walks through the spot, the poker idea, the numbers, and one question to carry forward.</p>
               </div>
 
-              <div id="coach-snapshot" class="coach-snapshot" hidden aria-live="polite">
+              <div id="coach-snapshot" class="coach-snapshot" hidden>
                 <p id="call-assessment" class="call-assessment" data-assessment="no_call">No call to price</p>
+                <section id="coach-lesson" class="coach-lesson" aria-label="Guided decision lesson" hidden>
+                  <div class="coach-lesson-heading">
+                    <span id="lesson-label" class="lesson-label"></span>
+                    <span id="lesson-count" class="lesson-count"></span>
+                  </div>
+                  <h3 id="lesson-title"></h3>
+                  <p id="lesson-body" aria-live="polite"></p>
+                  <nav class="lesson-navigation" aria-label="Decision lesson steps">
+                    <button id="lesson-previous" class="quiet-button" type="button" aria-label="Previous lesson step">Previous</button>
+                    <button id="lesson-next" class="quiet-button" type="button" aria-label="Next lesson step">Next idea</button>
+                  </nav>
+                </section>
+                <h3 class="coach-subheading">Numbers at a glance</h3>
                 <dl class="metric-list">
-                  <div><dt>Pot odds</dt><dd id="coach-pot-odds">—</dd></div>
-                  <div><dt>Estimated equity</dt><dd id="coach-equity">—</dd></div>
-                  <div><dt>Call EV</dt><dd id="coach-ev">—</dd></div>
-                  <div><dt>SPR</dt><dd id="coach-spr">—</dd></div>
-                  <div><dt>Current hand</dt><dd id="coach-hand">—</dd></div>
+                  <div><dt><span>Pot odds</span><small>Break-even equity for this call</small></dt><dd id="coach-pot-odds">—</dd></div>
+                  <div><dt><span>Estimated equity</span><small>Expected share across modeled outcomes</small></dt><dd id="coach-equity">—</dd></div>
+                  <div><dt><span>Call EV</span><small>Average chip result if the model repeats</small></dt><dd id="coach-ev">—</dd></div>
+                  <div><dt><span>SPR</span><small>Effective stack compared with the pot</small></dt><dd id="coach-spr">—</dd></div>
+                  <div><dt><span>Current hand</span><small>Best made hand under this variant’s rules</small></dt><dd id="coach-hand">—</dd></div>
                 </dl>
-                <p id="coach-advice" class="coach-advice"></p>
+                <p id="coach-advice" class="coach-advice" hidden></p>
                 <p id="coach-spr-warning" class="coach-spr-warning" hidden></p>
+                <p id="coach-draws" class="coach-draws" hidden></p>
+                <h3 id="coach-limitations-title" class="coach-subheading coach-limitations-title" hidden>What this estimate cannot know</h3>
+                <ul id="coach-limitations" class="coach-limitations" hidden></ul>
                 <div id="bet-purpose" class="bet-purpose" hidden>
                   <span id="bet-purpose-label"></span>
                   <p id="bet-purpose-evidence"></p>

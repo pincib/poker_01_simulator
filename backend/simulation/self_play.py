@@ -1,4 +1,8 @@
-"""Seeded Hold'em bot self-play with per-hand chip and rake accounting."""
+"""Seeded variant-aware self-play with per-hand settlement and chip audits.
+
+The action policy is intentionally a lightweight rules stressor, not a product
+bot strategy or a solver. PLO runs default to the no-rake training rules.
+"""
 
 from __future__ import annotations
 
@@ -6,9 +10,9 @@ import random
 from dataclasses import dataclass
 
 from backend.engine.deck import Deck
-from backend.engine.evaluator import HandEvaluator
 from backend.engine.game_state import ActionType, GameState, Street
 from backend.engine.player import Player
+from backend.engine.rules import GameRules, GameVariant
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +47,12 @@ class SelfPlayResult:
     showdowns: int
     hands_won_by_fold: int
     max_actions_in_a_hand: int
+    variant: str
+    ties: int
+    all_in_hands: int
+    all_in_events: int
+    fold_actions: int
+    deadlocks: int
 
     @property
     def chips_conserved(self) -> bool:
@@ -50,7 +60,7 @@ class SelfPlayResult:
 
 
 class SelfPlaySimulator:
-    """Play independent, cash-table bot hands and audit each settlement."""
+    """Play independent Hold'em or PLO hands and audit each settlement."""
 
     def __init__(
         self,
@@ -60,17 +70,40 @@ class SelfPlaySimulator:
         starting_stack: int = 1_000,
         small_blind: int = 5,
         big_blind: int = 10,
-        rake: RakePolicy = RakePolicy(),
+        rake: RakePolicy | None = None,
         max_actions_per_hand: int = 200,
+        variant: GameVariant | str = GameVariant.TEXAS_HOLDEM,
     ) -> None:
-        if not 2 <= player_count <= 6:
-            raise ValueError("Self-play supports two to six players.")
+        try:
+            self._variant = GameVariant(variant)
+        except ValueError as exc:
+            raise ValueError(f"Unsupported self-play variant: {variant!r}.") from exc
+        self._rules = (
+            GameRules.pot_limit_omaha()
+            if self._variant is GameVariant.POT_LIMIT_OMAHA
+            else GameRules.texas_holdem()
+        )
+        if not self._rules.min_players <= player_count <= self._rules.max_players:
+            raise ValueError(
+                f"{self._variant.value} self-play supports {self._rules.min_players} "
+                f"to {self._rules.max_players} players."
+            )
         if not isinstance(starting_stack, int) or isinstance(starting_stack, bool) or starting_stack <= 0:
             raise ValueError("Starting stack must be a positive integer.")
         if small_blind <= 0 or big_blind < small_blind:
             raise ValueError("Blinds must satisfy 0 < small blind <= big blind.")
         if max_actions_per_hand <= 0:
             raise ValueError("Action limit must be positive.")
+        if rake is not None and not isinstance(rake, RakePolicy):
+            raise ValueError("rake must be a RakePolicy instance.")
+        # The PLO training MVP explicitly has no rake; Hold'em keeps its
+        # existing cash-game default. Callers can still pass a policy directly.
+        if rake is None:
+            rake = (
+                RakePolicy(basis_points=0, cap=0)
+                if self._variant is GameVariant.POT_LIMIT_OMAHA
+                else RakePolicy()
+            )
         self._seed = seed
         self._player_count = player_count
         self._starting_stack = starting_stack
@@ -84,7 +117,8 @@ class SelfPlaySimulator:
             raise ValueError("Hand count must be a positive integer.")
         rng = random.Random(self._seed)
         initial_chips = self._player_count * self._starting_stack
-        total_after = total_rake = action_total = showdowns = folds = max_actions_seen = 0
+        total_after = total_rake = action_total = showdowns = fold_wins = max_actions_seen = 0
+        ties = all_in_hands = all_in_events = fold_actions = 0
 
         for hand_number in range(hands):
             players = tuple(
@@ -98,8 +132,10 @@ class SelfPlaySimulator:
                 self._big_blind,
                 button_index=hand_number % self._player_count,
                 deck=deck,
+                rules=self._rules,
             )
             hand_actions = 0
+            hand_all_in_events = 0
             if state.street is Street.SHOWDOWN and not state.hand_complete:
                 state = self._resolve_showdown(state)
             while not state.hand_complete:
@@ -117,20 +153,33 @@ class SelfPlaySimulator:
                 action, amount = self._choose_action(state, actor, legal, rng)
                 state = state.apply_action(actor.id, action, amount)
                 hand_actions += 1
+                fold_actions += int(action is ActionType.FOLD)
+                updated_actor = state.player_by_id(actor.id)
+                hand_all_in_events += int(
+                    action is ActionType.ALL_IN or bool(updated_actor and updated_actor.is_all_in)
+                )
 
             action_total += hand_actions
             max_actions_seen = max(max_actions_seen, hand_actions)
-            folds += int(bool(state.action_history and state.action_history[-1].action is ActionType.FOLD))
             if state.street is Street.SHOWDOWN and not state.payouts:
                 state = self._resolve_showdown(state)
+            if state.showdown_ranks:
                 showdowns += 1
-            elif len(state.community_cards) == 5:
-                showdowns += 1
+            else:
+                # A fold may occur before a later showdown, so classify the
+                # hand by settlement path rather than its final action.
+                fold_wins += 1
+
+            all_in_events += hand_all_in_events
+            all_in_hands += int(hand_all_in_events > 0)
+            ties += int(any(len(award.winner_ids) > 1 for award in state.pot_awards))
 
             rake_amount = self._rake.collect(state.pot if not state.hand_complete else sum(p.total_contributed for p in state.players), flop_dealt=len(state.community_cards) >= 3)
             payout_total = sum(amount for _, amount in state.payouts)
-            if payout_total != (sum(player.total_contributed for player in state.players)):
+            if payout_total != sum(player.total_contributed for player in state.players):
                 raise RuntimeError(f"Payouts do not match contributions on hand {hand_number + 1}.")
+            if not state.hand_complete or state.current_player_id is not None:
+                raise RuntimeError(f"Self-play hand {hand_number + 1} did not reach a terminal state.")
             adjusted_payouts = dict(state.payouts)
             remaining_rake = rake_amount
             for player_id, payout in state.payouts:
@@ -152,26 +201,36 @@ class SelfPlaySimulator:
             rake_collected=total_rake,
             actions=action_total,
             showdowns=showdowns,
-            hands_won_by_fold=folds,
+            hands_won_by_fold=fold_wins,
             max_actions_in_a_hand=max_actions_seen,
+            variant=self._variant.value,
+            ties=ties,
+            all_in_hands=all_in_hands,
+            all_in_events=all_in_events,
+            fold_actions=fold_actions,
+            deadlocks=0,
         )
 
     @staticmethod
     def _resolve_showdown(state: GameState) -> GameState:
-        rankings = {
-            player.id: HandEvaluator.evaluate_7(player.hole_cards + state.community_cards)
-            for player in state.players
-            if player.is_active
-        }
-        return state.resolve_showdown(rankings)
+        return state.resolve_showdown()
 
     def _choose_action(self, state: GameState, actor: Player, legal: tuple[ActionType, ...], rng: random.Random) -> tuple[ActionType, int | None]:
         call_amount = state.amount_to_call
+        if ActionType.ALL_IN in legal and rng.random() < 0.035:
+            return ActionType.ALL_IN, None
         if call_amount == 0:
-            if ActionType.BET in legal and state.street is not Street.PREFLOP and rng.random() < 0.08:
-                target = min(actor.stack, max(self._big_blind, state.pot // 3))
-                if target > 0:
-                    return ActionType.BET, target
+            bet_action = ActionType.BET if ActionType.BET in legal else ActionType.RAISE
+            if bet_action in legal and state.street is not Street.PREFLOP and rng.random() < 0.08:
+                bounds = state.betting_bounds(actor.id)
+                minimum = int(bounds["minimum_raise_to"] or state.current_bet + self._big_blind)
+                maximum = int(bounds["maximum_raise_to"] or actor.current_bet + actor.stack)
+                target = min(
+                    maximum,
+                    max(minimum, actor.current_bet + max(self._big_blind, state.pot // 3)),
+                )
+                if target > state.current_bet:
+                    return bet_action, target
             return ActionType.CHECK, None
         if ActionType.FOLD in legal and rng.random() < 0.04:
             return ActionType.FOLD, None

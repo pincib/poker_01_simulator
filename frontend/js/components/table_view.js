@@ -7,7 +7,7 @@ const SUITS = {
   c: { symbol: "♣", name: "clubs", color: "#27784d" },
 };
 const SEAT_LAYOUT = ["seat--hero", "seat--top", "seat--top-left", "seat--top-right", "seat--bottom-left", "seat--bottom-right"];
-const DEFAULT_SEATS = ["You", "Aggro Alex", "Nitty Norman", "Calling Kevin", "Solver Sam", "Aggro Alex"];
+const DEFAULT_SEATS = ["You", "Aggro Alex", "Nitty Norman", "Calling Kevin", "Balanced Blair", "Aggro Alex"];
 
 export function renderGameState(state) {
   if (!state?.started) {
@@ -17,9 +17,12 @@ export function renderGameState(state) {
   }
 
   const seats = document.getElementById("table-seats");
-  seats.replaceChildren(...state.seats.map((seat, index) => createSeat(seat, SEAT_LAYOUT[index])));
+  seats.replaceChildren(...state.seats.map((seat, index) => createSeat(seat, SEAT_LAYOUT[index], state.hole_card_count || 2)));
+  const variantLabel = state.variant_label || (state.variant_id === "pot_limit_omaha" ? "Pot-Limit Omaha" : "Texas Hold’em");
+  document.getElementById("table-title").textContent = variantLabel;
   document.getElementById("table-meta").textContent = state.table_label;
   document.getElementById("table-pot").textContent = formatMoney(state.pot);
+  document.getElementById("table-blinds").textContent = `${formatMoney(state.small_blind)}/${formatMoney(state.big_blind)}`;
   document.getElementById("table-street").textContent = state.street.toUpperCase();
   document.getElementById("table-spr").textContent = state.spr_value == null ? "—" : Number(state.spr_value).toFixed(1);
   document.getElementById("community-cards").replaceChildren(...renderBoard(state.board));
@@ -34,11 +37,19 @@ export function renderGameState(state) {
     ? `Your action · ${state.hero_position}`
     : state.hand_complete ? "Hand complete" : "Opponent action");
   document.getElementById("table-message").textContent = message;
-  document.getElementById("poker-table").setAttribute("aria-label", `Texas Hold’em table, ${state.street}, pot ${formatMoney(state.pot)}`);
-  renderGameCoach(state.coach, state.coach_note, state.hand_complete, state.coach_context);
+  document.getElementById("table-message").dataset.state = "";
+  document.getElementById("poker-table").setAttribute(
+    "aria-label", `${variantLabel} table, ${state.street}, blinds ${formatMoney(state.small_blind)}/${formatMoney(state.big_blind)}, pot ${formatMoney(state.pot)}`,
+  );
+  renderGameCoach(state.coach, state.coach_note, state.hand_complete, state.coach_context, state.coach_feedback);
 }
 
 function renderIdleTable() {
+  const selectedVariant = document.getElementById("game-variant");
+  const variantId = selectedVariant?.value || "texas_holdem";
+  const variantLabel = selectedVariant?.selectedOptions?.[0]?.textContent || "Texas Hold’em";
+  document.getElementById("table-title").textContent = variantLabel;
+  document.getElementById("table-meta").textContent = `6-max · ${variantId === "pot_limit_omaha" ? "Pot-limit" : "No-limit"} · $1/$2`;
   const seats = document.getElementById("table-seats");
   seats.replaceChildren(...DEFAULT_SEATS.map((name, index) => createSeat({
     id: index ? `seat-${index}` : "hero",
@@ -52,18 +63,19 @@ function renderIdleTable() {
     cards_hidden: true,
     hole_cards: [],
     profile: index ? "Training opponent" : "You",
-  }, SEAT_LAYOUT[index])));
+  }, SEAT_LAYOUT[index], variantId === "pot_limit_omaha" ? 4 : 2)));
   document.getElementById("table-pot").textContent = "$0.00";
+  document.getElementById("table-blinds").textContent = "$1.00/$2.00";
   document.getElementById("table-street").textContent = "Waiting";
   document.getElementById("table-spr").textContent = "—";
   document.getElementById("community-cards").replaceChildren(...renderBoard([]));
   document.getElementById("hero-stack").textContent = "$200.00";
   document.getElementById("table-hand-label").textContent = "Waiting for a hand";
   document.getElementById("table-message").textContent = "Deal a hand to begin. Your cards stay private.";
-  document.getElementById("poker-table").setAttribute("aria-label", "Six-handed Texas Hold’em table. Waiting to deal.");
+  document.getElementById("poker-table").setAttribute("aria-label", `Six-handed ${variantLabel} table. Waiting to deal.`);
 }
 
-function createSeat(player, layout) {
+function createSeat(player, layout, holeCardCount) {
   const seat = document.createElement("div");
   seat.className = `seat ${layout}`;
   seat.dataset.folded = String(!player.active);
@@ -95,12 +107,13 @@ function createSeat(player, layout) {
 
   const cards = document.createElement("div");
   cards.className = "seat-cards";
+  cards.dataset.count = String(player.hole_cards?.length || (player.cards_hidden ? holeCardCount : 0));
   cards.setAttribute("aria-label", player.hole_cards?.length
     ? `${player.name} cards: ${player.hole_cards.map(readableCard).join(", ")}`
     : player.cards_hidden ? `${player.name} cards face down` : "No cards dealt");
   cards.append(...(player.hole_cards?.length
     ? player.hole_cards.map(createPlayingCard)
-    : player.cards_hidden ? [createCardBack(), createCardBack()] : []));
+    : player.cards_hidden ? Array.from({ length: holeCardCount }, createCardBack) : []));
   seat.append(identity, stack, status, cards);
   return seat;
 }

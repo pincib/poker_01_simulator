@@ -37,6 +37,76 @@ class MathEngineTests(unittest.TestCase):
         self.assertEqual((result.win_percentage, result.tie_percentage, result.loss_percentage), (100.0, 0.0, 0.0))
         self.assertEqual(result.equity_percentage, 100.0)
 
+    def test_plo_known_river_uses_exact_two_hole_and_three_board_cards(self) -> None:
+        result = EquityCalculator.calculate(
+            hero_hole=cards("Ac", "Kc", "2d", "3h"),
+            villain_hole=cards("9c", "8c", "4d", "5h"),
+            board=cards("Qc", "Jc", "Tc", "2s", "3s"),
+            iterations=25,
+            seed=7,
+        )
+        self.assertEqual((result.win_percentage, result.tie_percentage, result.loss_percentage), (100.0, 0.0, 0.0))
+
+    def test_plo_partial_board_range_and_seed_are_reproducible(self) -> None:
+        kwargs = dict(
+            hero_hole=cards("As", "Ah", "Kd", "Qc"),
+            board=cards("2c", "3d", "4h"),
+            villain_range=(cards("Ks", "Kh", "Jd", "Tc"), cards("Qs", "Qh", "9d", "8c")),
+            iterations=300,
+            seed=441,
+        )
+        first = EquityCalculator.calculate(**kwargs)
+        second = EquityCalculator.calculate(**kwargs)
+        self.assertEqual(first, second)
+        self.assertEqual(first.iterations, 300)
+        self.assertAlmostEqual(first.win_percentage + first.tie_percentage + first.loss_percentage, 100.0)
+
+    def test_plo_turn_with_uniform_and_ranged_multiway_opponents_is_reproducible(self) -> None:
+        args = (
+            cards("As", "Ah", "Kd", "Qc"),
+            (None, (cards("Ks", "Kh", "Jd", "Tc"),)),
+            cards("2c", "3d", "4h", "5s"),
+        )
+        first = EquityCalculator.calculate_multiway(*args, iterations=100, seed=92)
+        second = EquityCalculator.calculate_multiway(*args, iterations=100, seed=92)
+        self.assertEqual(first, second)
+        self.assertEqual(first.iterations, 100)
+        self.assertAlmostEqual(first.win_percentage + first.tie_percentage + first.loss_percentage, 100.0)
+
+    def test_plo_multiway_ranges_remove_collisions_and_split_ties_by_winner_count(self) -> None:
+        result = EquityCalculator.calculate_multiway(
+            hero_hole=cards("As", "Kd", "2c", "3d"),
+            opponent_ranges=(
+                (cards("Ah", "Qd", "4c", "5d"),),
+                (cards("Ac", "Jd", "6c", "7d"),),
+            ),
+            board=cards("2s", "3s", "4h", "5s", "9c"),
+            iterations=20,
+            seed=19,
+        )
+        self.assertAlmostEqual(result.win_percentage + result.tie_percentage + result.loss_percentage, 100.0)
+        self.assertGreaterEqual(result.equity_percentage, 0.0)
+        self.assertLessEqual(result.equity_percentage, 100.0)
+
+    def test_plo_range_with_only_blocked_combos_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "no hands remaining"):
+            EquityCalculator.calculate(
+                hero_hole=cards("As", "Ah", "Ks", "Kh"),
+                villain_range=(cards("As", "Ad", "Kd", "Qd"),),
+                iterations=1,
+            )
+
+    def test_plo_multiway_ranges_without_compatible_combinations_are_rejected(self) -> None:
+        forced = cards("Ks", "Kh", "Jd", "Tc")
+        with self.assertRaisesRegex(ValueError, "no mutually compatible"):
+            EquityCalculator.calculate_multiway(
+                hero_hole=cards("As", "Ah", "Kd", "Qc"),
+                opponent_ranges=((forced,), (forced,)),
+                board=cards("2c", "3d", "4h"),
+                iterations=1,
+                seed=2,
+            )
+
     def test_aces_vs_kings_preflop_is_near_the_known_equity(self) -> None:
         result = EquityCalculator.calculate(
             hero_hole=cards("As", "Ah"),

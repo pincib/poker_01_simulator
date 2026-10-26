@@ -90,7 +90,7 @@ poker_simulator/
 │   │   ├── equity.py           # Monte Carlo rollout simulator (10,000 runs)
 │   │   ├── pot_odds.py         # Pot odds, SPR, and EV calculator
 │   │   ├── ranges.py           # 13x13 preflop range matrix & combo models
-│   │   ├── ai_agent.py         # Bot decision engine (TAG, LAG, Station, GTO)
+│   │   ├── ai_agent.py         # Hold'em and PLO heuristic bot profiles
 │   │   └── coach.py            # Live decision auditor & leak detector
 │   └── tests/
 │       ├── test_evaluator.py   # Unit tests for rank hierarchy & tie-breaks
@@ -199,7 +199,7 @@ flowchart TD
     StratTree -->|Nit| TightAction[Fold everything except top 10% hands]
     StratTree -->|Fish / Station| PassiveAction[Call with any pair; rarely fold or bluff]
     StratTree -->|TAG| AggroAction[Value bet aggressively; selective bluffs]
-    StratTree -->|GTO| BalancedAction[Mixed frequency bluffs & balanced bet sizing]
+    StratTree -->|Balanced heuristic| BalancedAction[Mixed-frequency bluffs and sizing]
 ```
 
 ### Step-by-Step Tasks:
@@ -210,7 +210,7 @@ flowchart TD
 3. **Bet Sizing Logic:**
    * Preset sizing options: Small C-Bet (33% pot on dry boards), Standard Bet (50%–75% pot on wet boards), Overbet / All-In (polarized river spots).
 4. **AI Archetypes:**
-   * Provide selectable bot opponents: `"Nitty Norman"`, `"Calling Kevin"`, `"Aggro Alex"`, and `"Solver Sam"`.
+   * Provide selectable heuristic bot opponents: `"Nitty Norman"`, `"Calling Kevin"`, `"Aggro Alex"`, and `"Balanced Blair"`. These profiles are not solver/GTO strategies.
 
 ---
 

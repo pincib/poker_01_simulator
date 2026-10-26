@@ -58,7 +58,47 @@ class PLOBridgeTests(unittest.TestCase):
         self.assertEqual(result.out_count, 13)
         self.assertTrue(result.is_wrap)
         self.assertEqual(len(set(result.straight_outs)), 13)
-        self.assertEqual(result.clean_outs, result.straight_outs)
+        self.assertEqual(result.clean_outs, ())
+        self.assertEqual(result.dirty_outs, ())
+        self.assertEqual(set(result.unverified_outs), set(result.straight_outs) | set(result.flush_outs))
+
+    def test_nut_flush_draw_counts_exact_two_hole_flush_cards_and_paired_board_redraw(self) -> None:
+        result = OmahaWrapDetector.analyze(
+            cards("As", "5s", "Qh", "Jc"), cards("Ks", "8s", "3d")
+        )
+        self.assertEqual(len(result.flush_outs), 9)
+        self.assertEqual(len(result.nut_flush_outs), 8)
+        self.assertIn("3s", {card.code for card in result.flush_outs})
+        self.assertNotIn("3s", {card.code for card in result.nut_flush_outs})
+        self.assertIn("3s", {card.code for card in result.board_pairing_cards})
+        self.assertEqual(len(result.hero_blocker_cards), 4)
+        self.assertGreater(result.hero_blocked_opponent_combos, 0)
+        self.assertTrue(any("not a guaranteed showdown win" in line for line in result.evidence))
+
+    def test_non_nut_flush_draw_is_distinguished_from_nut_flush_draw(self) -> None:
+        result = OmahaWrapDetector.analyze(
+            cards("Qs", "Js", "4h", "3c"), cards("Ks", "8s", "2d")
+        )
+        self.assertEqual(len(result.flush_outs), 9)
+        self.assertEqual({card.code for card in result.nut_flush_outs}, {"As"})
+        self.assertTrue((set(result.flush_outs) - set(result.nut_flush_outs)).issubset(result.non_nut_outs))
+
+    def test_one_hole_card_of_a_suit_cannot_make_a_plo_flush_draw(self) -> None:
+        result = OmahaWrapDetector.analyze(
+            cards("As", "5h", "Qd", "Jc"), cards("Ks", "8s", "3d")
+        )
+        self.assertEqual(result.flush_outs, ())
+
+    def test_exposed_blockers_and_villain_redraws_are_reported_conservatively(self) -> None:
+        result = OmahaWrapDetector.analyze(
+            cards("Qh", "Jh", "9c", "8s"),
+            cards("Th", "7h", "2c"),
+            cards("6s", "9s", "Ah", "Kh"),
+        )
+        self.assertIn("6s", {card.code for card in result.villain_blocked_straight_outs})
+        self.assertTrue(result.dirty_outs)
+        self.assertTrue(result.opponent_redraws)
+        self.assertTrue(any("tie or overtake" in line for line in result.evidence))
 
     def test_wrap_detector_removes_villain_blockers_and_stops_on_river(self) -> None:
         hero = cards("Qh", "Jh", "9c", "8s")
@@ -68,7 +108,7 @@ class PLOBridgeTests(unittest.TestCase):
 
         self.assertLess(result.out_count, 13)
         self.assertTrue(result.dirty_outs)
-        self.assertEqual(result.out_count, len(result.clean_outs) + len(result.dirty_outs))
+        self.assertEqual(len(set(result.straight_outs) | set(result.flush_outs)), len(result.clean_outs) + len(result.dirty_outs))
         self.assertEqual(river.out_count, 0)
 
 

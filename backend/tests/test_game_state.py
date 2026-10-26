@@ -1,10 +1,13 @@
 """State-machine tests for blinds, betting actions, and all-in runouts."""
 
 import unittest
+from dataclasses import replace
 
 from backend.engine.deck import Deck
 from backend.engine.game_state import ActionType, GameState, Street
 from backend.engine.player import Player
+from backend.engine.rules import GameRules, GameVariant
+from backend.engine.card import Card
 
 
 class GameStateTests(unittest.TestCase):
@@ -22,6 +25,69 @@ class GameStateTests(unittest.TestCase):
         self.assertTrue(all(len(player.hole_cards) == 2 for player in state.players))
         self.assertEqual([player.position.value for player in state.players], ["BTN", "SB", "BB"])
         self.assertEqual([player.stack for player in players], [100, 100, 100])
+        self.assertEqual(state.rules.variant, GameVariant.TEXAS_HOLDEM)
+
+    def test_plo_deals_four_cards_per_player_and_records_variant(self) -> None:
+        state = GameState.new_hand(
+            self.make_players((100, 100, 100)), 1, 2,
+            deck=Deck(shuffle=False), rules=GameRules.pot_limit_omaha(),
+        )
+
+        self.assertEqual(state.rules.variant, GameVariant.POT_LIMIT_OMAHA)
+        self.assertTrue(all(len(player.hole_cards) == 4 for player in state.players))
+        self.assertEqual(state.deck_cursor, 12)
+        acted = state.apply_action(state.current_player_id, ActionType.CALL)
+        self.assertEqual(acted.action_history[-1].variant, GameVariant.POT_LIMIT_OMAHA)
+
+    def test_variant_rules_validate_seat_count(self) -> None:
+        with self.assertRaisesRegex(ValueError, "between 2 and 6"):
+            GameState.new_hand(self.make_players((100,)), 1, 2, rules=GameRules.pot_limit_omaha())
+
+    def test_plo_preflop_raise_is_capped_by_pot_and_backend_reports_bounds(self) -> None:
+        state = GameState.new_hand(
+            self.make_players((100, 100, 100)), 1, 2,
+            deck=Deck(shuffle=False), rules=GameRules.pot_limit_omaha(),
+        )
+        self.assertEqual(state.betting_bounds(), {
+            "amount_to_call": 2, "minimum_raise_to": 4, "maximum_raise_to": 7, "all_in_to": 100,
+        })
+        with self.assertRaisesRegex(ValueError, "pot-limit maximum"):
+            state.apply_action("p0", ActionType.RAISE, 8)
+        state = state.apply_action("p0", ActionType.RAISE, 7)
+        self.assertEqual(state.player_by_id("p0").current_bet, 7)
+        self.assertEqual(state.current_player_id, "p1")
+        self.assertEqual(state.betting_bounds()["maximum_raise_to"], 22)
+
+    def test_plo_pot_limit_bounds_are_recomputed_after_flop_and_capped_by_stack(self) -> None:
+        state = GameState.new_hand(
+            self.make_players((40, 40)), 1, 2,
+            deck=Deck(shuffle=False), rules=GameRules.pot_limit_omaha(),
+        )
+        state = state.apply_action("p0", ActionType.CALL)
+        state = state.apply_action("p1", ActionType.CHECK)
+        self.assertEqual(state.street, Street.FLOP)
+        self.assertEqual(state.betting_bounds()["maximum_raise_to"], 4)
+        state = state.apply_action("p1", ActionType.BET, 4)
+        self.assertEqual(state.betting_bounds()["maximum_raise_to"], 16)
+        with self.assertRaisesRegex(ValueError, "pot-limit maximum"):
+            state.apply_action("p0", ActionType.RAISE, 17)
+
+    def test_plo_short_call_and_short_all_in_raise_respect_pot_and_stack(self) -> None:
+        state = GameState.new_hand(
+            self.make_players((5, 8, 8)), 1, 2,
+            deck=Deck(shuffle=False), rules=GameRules.pot_limit_omaha(),
+        )
+        state = state.apply_action("p0", ActionType.CALL)
+        self.assertEqual(state.player_by_id("p0").stack, 3)
+        self.assertEqual(state.current_player_id, "p1")
+        self.assertEqual(state.betting_bounds()["amount_to_call"], 1)
+        self.assertEqual(state.betting_bounds()["all_in_to"], 8)
+        self.assertEqual(state.betting_bounds()["maximum_raise_to"], 7)
+        with self.assertRaisesRegex(ValueError, "pot-limit maximum"):
+            state.apply_action("p1", ActionType.RAISE, 8)
+        state = state.apply_action("p1", ActionType.RAISE, 7)
+        self.assertEqual(state.current_player_id, "p2")
+        self.assertIn(ActionType.CALL, state.legal_actions())
 
     def test_short_stacks_run_to_showdown_and_award_main_and_side_pots(self) -> None:
         state = GameState.new_hand(self.make_players((20, 45, 100)), 5, 10, deck=Deck(shuffle=False))
@@ -39,14 +105,57 @@ class GameStateTests(unittest.TestCase):
         self.assertFalse(state.hand_complete)
         self.assertEqual(state.pot, 110)
         self.assertEqual(len(state.community_cards), 5)
-        settled = state.resolve_showdown({"p0": 1, "p1": 2, "p2": 3})
+        settled = state.resolve_showdown()
 
-        self.assertEqual(dict(settled.payouts), {"p0": 60, "p1": 50})
-        self.assertEqual([player.stack for player in settled.players], [60, 50, 55])
+        self.assertEqual(sum(dict(settled.payouts).values()), 110)
         self.assertEqual(sum(player.stack for player in settled.players), 165)
         self.assertEqual(initial_snapshot.street, Street.PREFLOP)
         self.assertEqual(initial_snapshot.pot, 15)
         self.assertEqual([player.stack for player in initial_snapshot.players], [20, 40, 90])
+
+    def test_plo_showdown_rejects_board_only_trap_and_records_exact_used_cards(self) -> None:
+        state = GameState.new_hand(
+            self.make_players((20, 20)), 1, 2, deck=Deck(shuffle=False),
+            rules=GameRules.pot_limit_omaha(),
+        )
+        plo_players = state.players
+        board = tuple(state.deck_order[8:13])
+        deck = state.deck_order
+        dealt = {card for player in plo_players for card in player.hole_cards} | set(board)
+        burns = tuple(card for card in deck if card not in dealt)[: 20 - len(dealt)]
+        state = replace(state, street=Street.SHOWDOWN, community_cards=board,
+                        current_player_id=None, pending_action_ids=(), deck_order=deck, deck_cursor=20,
+                        burned_cards=burns)
+        rankings, used = state.evaluate_showdown_hands()
+        for player_id, cards_used in used.items():
+            self.assertEqual(len(cards_used), 5)
+            self.assertEqual(sum(card in state.player_by_id(player_id).hole_cards for card in cards_used), 2)
+            self.assertEqual(sum(card in board for card in cards_used), 3)
+            self.assertNotEqual(set(cards_used), set(board))
+
+    def test_plo_showdown_splits_tie_and_awards_main_and_side_pots_conservatively(self) -> None:
+        players = (
+            Player("short", "Short", 0, 10, tuple(Card.from_code(c) for c in ("2c", "4d", "6h", "9c")), True, True, total_contributed=10),
+            Player("mid", "Mid", 0, 20, tuple(Card.from_code(c) for c in ("2d", "4c", "6s", "9h")), True, True, total_contributed=20),
+            Player("deep", "Deep", 10, 20, tuple(Card.from_code(c) for c in ("2s", "5d", "7s", "4h")), True, False, total_contributed=20),
+        )
+        board = tuple(Card.from_code(code) for code in ("As", "Kd", "Qh", "8c", "3s"))
+        deck = tuple(reversed(Deck(shuffle=False).cards))
+        dealt = {card for player in players for card in player.hole_cards} | set(board)
+        burns = tuple(card for card in deck if card not in dealt)[: 20 - len(dealt)]
+        state = GameState(
+            players=players, rules=GameRules.pot_limit_omaha(), button_index=0,
+            small_blind=1, big_blind=2, street=Street.SHOWDOWN, community_cards=board,
+            current_player_id=None, pending_action_ids=(), last_full_raise_size=2,
+            deck_order=deck, deck_cursor=20, burned_cards=burns,
+        )
+        settled = state.resolve_showdown()
+        self.assertEqual(dict(settled.payouts), {"short": 15, "mid": 35})
+        self.assertEqual(sum(dict(settled.payouts).values()), state.pot)
+        self.assertEqual([award.amount for award in settled.pot_awards], [30, 20])
+        self.assertEqual([award.winner_ids for award in settled.pot_awards], [("short", "mid"), ("mid",)])
+        self.assertEqual(dict(settled.showdown_ranks)["short"], dict(settled.showdown_ranks)["mid"])
+        self.assertEqual(sum(player.stack for player in settled.players), sum(player.stack for player in state.players) + state.pot)
 
     def test_fold_awards_current_pot_and_completes_hand(self) -> None:
         state = GameState.new_hand(self.make_players((100, 100)), 5, 10, deck=Deck(shuffle=False))

@@ -4,6 +4,7 @@ let gameState = null;
 let submitAction = async () => {};
 let requestPending = false;
 let selectedFraction = 0.5;
+let selectedMax = false;
 
 export function initializeActionBar({ onAction }) {
   submitAction = onAction;
@@ -21,10 +22,21 @@ export function initializeActionBar({ onAction }) {
     const button = event.target.closest("[data-pot-fraction]");
     if (!button || !gameState) return;
     selectedFraction = Number(button.dataset.potFraction);
-    document.querySelectorAll(".size-button").forEach((item) => item.classList.toggle("selected", item === button));
+    selectedMax = false;
+    document.querySelectorAll("#size-presets .size-button").forEach((item) => item.classList.toggle("selected", item === button));
     setPresetAmount();
   });
-  document.getElementById("raise-to-input").addEventListener("input", updateBetLabel);
+  document.getElementById("max-bet-button").addEventListener("click", () => {
+    if (!gameState) return;
+    selectedMax = true;
+    document.querySelectorAll("#size-presets .size-button").forEach((item) => item.classList.toggle("selected", item.id === "max-bet-button"));
+    setPresetAmount();
+  });
+  document.getElementById("raise-to-input").addEventListener("input", () => {
+    selectedMax = false;
+    document.querySelectorAll("#size-presets .size-button").forEach((item) => item.classList.remove("selected"));
+    updateBetLabel();
+  });
   document.getElementById("raise-to-input").addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -61,13 +73,14 @@ export function renderActionBar(state) {
   const inputWrap = document.querySelector(".size-input-wrap");
   const betButton = document.getElementById("bet-button");
   const allIn = document.getElementById("all-in-button");
+  const maxBet = document.getElementById("max-bet-button");
   const canBet = legal.has("bet") || legal.has("raise");
   const canCall = legal.has("call");
   const canCheck = legal.has("check");
 
   document.getElementById("action-prompt").textContent = isHeroTurn ? `Your action · ${state.hero_position}` : "Opponent action";
   document.getElementById("action-hint").textContent = isHeroTurn
-    ? "Space check/call · F fold · C call · B bet ½ pot"
+    ? `Space check · F fold · C call · B ${legal.has("raise") ? "raise" : "bet"} to total`
     : "The opponent profiles are choosing an action.";
   foldButton.disabled = requestPending || !isHeroTurn || !legal.has("fold");
   foldButton.hidden = !legal.has("fold");
@@ -85,8 +98,19 @@ export function renderActionBar(state) {
   betButton.disabled = requestPending || !isHeroTurn || !canBet;
   allIn.hidden = !legal.has("all_in");
   allIn.disabled = requestPending || !isHeroTurn || !legal.has("all_in");
+  maxBet.disabled = requestPending || !isHeroTurn || !canBet;
+  maxBet.textContent = state.betting_structure === "pot_limit" ? "Pot max" : "Max";
+  maxBet.setAttribute(
+    "aria-label",
+    `${state.betting_structure === "pot_limit" ? "Pot-limit maximum" : "Maximum legal"} bet or raise to ${formatMoney(state.raise_max)} total`,
+  );
   betButton.dataset.action = legal.has("raise") ? "raise" : "bet";
-  document.getElementById("raise-to-label").textContent = legal.has("raise") ? "Raise to" : "Bet to";
+  document.getElementById("raise-to-label").textContent = legal.has("raise") ? "Raise to total" : "Bet to total";
+  const limitNote = document.getElementById("bet-limit-note");
+  limitNote.textContent = state.betting_structure === "pot_limit"
+    ? `Pot-limit · max ${legal.has("raise") ? "raise" : "bet"} to ${formatMoney(state.raise_max)} total`
+    : `Maximum total on this street: ${formatMoney(state.raise_max)}`;
+  limitNote.hidden = !canBet;
 
   const input = document.getElementById("raise-to-input");
   input.min = String(state.raise_min);
@@ -108,6 +132,9 @@ export function showActionError(message) {
   const status = document.getElementById("action-status");
   status.textContent = message;
   status.dataset.state = "error";
+  const tableMessage = document.getElementById("table-message");
+  tableMessage.textContent = message;
+  tableMessage.dataset.state = "error";
 }
 
 function setPresetAmount() {
@@ -116,7 +143,8 @@ function setPresetAmount() {
   const minRaise = Number(gameState.raise_min);
   const maxRaise = Number(gameState.raise_max);
   const increment = Math.max(gameState.big_blind, Math.round(potToSize * selectedFraction));
-  const target = Math.min(maxRaise, Math.max(minRaise, gameState.current_bet + gameState.hero_to_call + increment));
+  const potPresetTarget = gameState.current_bet + gameState.hero_to_call + increment;
+  const target = selectedMax ? maxRaise : Math.min(maxRaise, Math.max(minRaise, potPresetTarget));
   const input = document.getElementById("raise-to-input");
   input.value = String(target);
   updateBetLabel();

@@ -33,8 +33,25 @@ class SimulatorRequestHandler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/config":
             self._send_json({
                 "name": "Poker Mastery Simulator",
+                "api_version": 1,
                 "default_variant": "texas_holdem",
                 "rule_variants": ["texas_holdem", "pot_limit_omaha"],
+                "variants": {
+                    "texas_holdem": {
+                        "label": "Texas Hold'em",
+                        "hole_card_count": 2,
+                        "betting_structure": "no_limit",
+                        "min_players": 2,
+                        "max_players": 6,
+                    },
+                    "pot_limit_omaha": {
+                        "label": "Pot-Limit Omaha",
+                        "hole_card_count": 4,
+                        "betting_structure": "pot_limit",
+                        "min_players": 2,
+                        "max_players": 6,
+                    },
+                },
                 "features": {"training_coach": "available", "session_review": "available"},
             })
             return
@@ -79,9 +96,12 @@ class SimulatorRequestHandler(SimpleHTTPRequestHandler):
                     opponent_last_action=payload.get("opponent_last_action"),
                     opponent_hole=_optional_cards(payload.get("opponent_hole"), "opponent_hole"),
                     opponent_range=_optional_range(payload.get("opponent_range")),
+                    opponent_ranges=_optional_ranges(payload.get("opponent_ranges")),
+                    opponent_ranges_action_filtered=payload.get("opponent_ranges_action_filtered") is True,
                     big_blind=payload.get("big_blind", 1),
                     iterations=payload.get("iterations", 1_000),
                     seed=payload.get("seed"),
+                    variant=payload.get("variant"),
                 )
                 self._send_json(result.to_dict())
                 return
@@ -104,10 +124,13 @@ class SimulatorRequestHandler(SimpleHTTPRequestHandler):
                 self._send_json(record.to_dict(), 201)
                 return
             if parsed.path == "/api/game/start":
-                self._send_json(TRAINING_TABLE.start_hand())
+                variant = payload.get("variant")
+                self._send_json(TRAINING_TABLE.start_hand(variant))
                 return
             if parsed.path == "/api/game/action":
-                self._send_json(TRAINING_TABLE.act(payload.get("action"), payload.get("amount")))
+                self._send_json(TRAINING_TABLE.act(
+                    payload.get("action"), payload.get("amount"), variant=payload.get("variant")
+                ))
                 return
             self._send_json({"error": "API route not found."}, 404)
         except (KeyError, TypeError, ValueError) as exc:
@@ -176,8 +199,16 @@ def _optional_range(value: object) -> tuple[tuple[Card, ...], ...] | None:
     if value is None:
         return None
     if not isinstance(value, list):
-        raise ValueError("opponent_range must be a list of two-card hands.")
+        raise ValueError("opponent_range must be a list of hands matching hero_hole's card count.")
     return tuple(_cards(combo, "opponent_range hand") for combo in value)
+
+
+def _optional_ranges(value: object) -> tuple[tuple[tuple[Card, ...], ...], ...] | None:
+    if value is None:
+        return None
+    if not isinstance(value, list):
+        raise ValueError("opponent_ranges must be a list of opponent ranges.")
+    return tuple(_optional_range(range_value) or () for range_value in value)
 
 
 if __name__ == "__main__":

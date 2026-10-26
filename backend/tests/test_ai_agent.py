@@ -3,7 +3,7 @@
 import unittest
 from dataclasses import replace
 
-from backend.brain.ai_agent import OpponentAI, OpponentProfile
+from backend.brain.ai_agent import OpponentAI, OpponentProfile, plo_starting_hand_score
 from backend.brain.board_texture import BoardTextureClassifier, SuitPattern
 from backend.brain.bet_sizing import BetSizer, SizingOption
 from backend.brain.ranges import get_opening_range
@@ -11,6 +11,7 @@ from backend.engine.card import Card
 from backend.engine.deck import Deck
 from backend.engine.game_state import ActionType, GameState, Street
 from backend.engine.player import Player, Position
+from backend.engine.rules import GameRules
 
 
 def cards(*codes: str) -> tuple[Card, ...]:
@@ -18,6 +19,63 @@ def cards(*codes: str) -> tuple[Card, ...]:
 
 
 class OpponentAITests(unittest.TestCase):
+    def test_plo_preflop_score_rewards_coordinated_nut_potential(self) -> None:
+        premium = plo_starting_hand_score(cards("As", "Ah", "Ks", "Qh"))
+        weak = plo_starting_hand_score(cards("7c", "2d", "Jc", "4h"))
+        self.assertGreater(premium, weak)
+        with self.assertRaises(ValueError):
+            plo_starting_hand_score(cards("As", "Ah", "Ks"))
+
+    def test_plo_decision_is_seed_reproducible_and_within_backend_bounds(self) -> None:
+        state = GameState.new_hand(
+            (Player("p0", "P0", 120), Player("p1", "P1", 120), Player("p2", "P2", 120)),
+            1, 2, deck=Deck(shuffle=False), rules=GameRules.pot_limit_omaha(),
+        )
+        actor = state.current_player
+        first = OpponentAI("aggressive", equity_iterations=4).decide(state, actor.id, seed=92)
+        repeated = OpponentAI("aggressive", equity_iterations=4).decide(state, actor.id, seed=92)
+        self.assertEqual(first, repeated)
+        self.assertIn(first.action, state.legal_actions())
+        if first.action in (ActionType.BET, ActionType.RAISE):
+            self.assertLessEqual(first.amount, state.betting_bounds(actor.id)["maximum_raise_to"])
+
+    def test_plo_postflop_decision_uses_ranges_and_records_an_explanation(self) -> None:
+        state = GameState.new_hand(
+            tuple(Player(f"p{i}", f"P{i}", 120) for i in range(3)),
+            1, 2, deck=Deck(shuffle=False), rules=GameRules.pot_limit_omaha(),
+        )
+        while state.street is Street.PREFLOP:
+            actor = state.current_player
+            action = ActionType.CALL if ActionType.CALL in state.legal_actions() else ActionType.CHECK
+            state = state.apply_action(actor.id, action)
+        actor = state.current_player
+        decision = OpponentAI("balanced", equity_iterations=3, seed=17).decide(state, actor.id, seed=18)
+        self.assertIn(decision.action, state.legal_actions())
+        self.assertGreater(decision.range_size, 0)
+        self.assertIn("equity", decision.reason.lower())
+        self.assertEqual(decision.seed, 18)
+
+    def test_plo_profile_bots_complete_a_hand_without_illegal_actions(self) -> None:
+        state = GameState.new_hand(
+            tuple(Player(f"p{i}", f"P{i}", 36) for i in range(3)),
+            1, 2, deck=Deck(shuffle=False), rules=GameRules.pot_limit_omaha(),
+        )
+        bots = {player.id: OpponentAI(profile, equity_iterations=3, seed=i + 1)
+                for i, (player, profile) in enumerate(zip(state.players, ("tight", "aggressive", "calling_station")))}
+        action_count = 0
+        while not state.hand_complete:
+            actor = state.current_player
+            self.assertIsNotNone(actor, "unfinished hand must have a next actor")
+            decision = bots[actor.id].decide(state, actor.id)
+            self.assertIn(decision.action, state.legal_actions())
+            if decision.action in (ActionType.BET, ActionType.RAISE):
+                self.assertLessEqual(decision.amount, state.betting_bounds(actor.id)["maximum_raise_to"])
+            state = state.apply_action(actor.id, decision.action, decision.amount)
+            action_count += 1
+            self.assertLess(action_count, 100, "bot hand must not deadlock")
+        self.assertGreater(action_count, 0)
+        self.assertEqual(sum(amount for _, amount in state.payouts), sum(p.total_contributed for p in state.players))
+
     def test_positional_ranges_hit_the_roadmap_opening_percentages(self) -> None:
         expected = {
             Position.UNDER_THE_GUN: 15,
@@ -82,7 +140,7 @@ class OpponentAITests(unittest.TestCase):
     def test_profiles_have_requested_names_and_nit_folds_a_trash_utg_hand(self) -> None:
         self.assertEqual(
             [profile.display_name for profile in OpponentProfile],
-            ["Nitty Norman", "Calling Kevin", "Aggro Alex", "Solver Sam"],
+            ["Nitty Norman", "Calling Kevin", "Aggro Alex", "Balanced Blair"],
         )
         state = GameState.new_hand(
             tuple(Player(f"p{i}", f"Player {i}", 100) for i in range(6)),

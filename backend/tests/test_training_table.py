@@ -12,7 +12,7 @@ from backend.engine.training_table import TrainingTable
 
 
 def players(count: int) -> tuple[Player, ...]:
-    names = ("You", "Aggro Alex", "Nitty Norman", "Calling Kevin", "Solver Sam", "Aggro Alex")
+    names = ("You", "Aggro Alex", "Nitty Norman", "Calling Kevin", "Balanced Blair", "Aggro Alex")
     return tuple(Player("hero" if seat == 0 else f"bot-{seat}", names[seat], 200) for seat in range(count))
 
 
@@ -28,7 +28,7 @@ def finish_uncontested_showdown(state: GameState) -> GameState:
         for player in state.players
         if player.is_active
     }
-    return state.resolve_showdown(rankings)
+    return state.resolve_showdown()
 
 
 class TrainingTableTests(unittest.TestCase):

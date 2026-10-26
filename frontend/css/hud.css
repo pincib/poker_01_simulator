@@ -1,7 +1,8 @@
 .coach-panel { padding: 18px; display: flex; flex-direction: column; }
 .coach-heading { display: flex; justify-content: space-between; align-items: start; gap: 10px; }
 .coach-heading h2 { margin-bottom: 4px; font-size: 19px; }
-.coach-state { padding: 6px 8px; border: 1px solid #45624f; border-radius: 5px; color: #c6d8cb; font-size: 12px; white-space: nowrap; }
+.coach-state { padding: 8px 10px; border: 1px solid #45624f; border-radius: 5px; color: #c6d8cb; font-size: 12px; white-space: nowrap; }
+.coach-feedback { margin: 10px 0 0; color: #d6e2d8; font-size: 12px; line-height: 1.55; }
 .quiet-button { min-height: 34px; padding: 0 10px; border: 1px solid #496252; border-radius: 6px; background: transparent; color: #d3e1d5; font-size: 12px; font-weight: 650; cursor: pointer; }
 .quiet-button:hover { border-color: #8eaa91; background: #1b3528; }
 .coach-heading + #coach-content { margin-top: 12px; }
@@ -13,21 +14,37 @@
 .decision-mark span:nth-child(3) { height: 24px; border-color: #ba9c50; background: #8f7738; }
 .coach-empty h3 { margin-bottom: 6px; font-size: 13px; }
 .coach-empty p { max-width: 30ch; margin-bottom: 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.coach-subheading { margin: 14px 0 2px; color: #d9e4dc; font-size: 12px; }
+.coach-lesson { margin-top: 9px; padding: 13px 10px 11px; border-block: 1px solid #314a3a; }
+.coach-lesson-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.lesson-label { color: #e6d99a; font-size: 12px; font-weight: 750; letter-spacing: .06em; }
+.lesson-count { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.coach-lesson h3 { margin: 7px 0 5px; font-size: 14px; }
+.coach-lesson > p { min-height: 5.5em; margin: 0; color: #d1ded4; font-size: 12px; line-height: 1.6; white-space: pre-line; }
+.lesson-navigation { display: flex; justify-content: space-between; gap: 10px; margin-top: 11px; }
+.lesson-navigation .quiet-button { min-height: 31px; }
+.lesson-navigation .quiet-button:disabled { cursor: default; opacity: .45; }
 .metric-list { margin: 8px 0 0; }
-.metric-list div { min-height: 40px; padding-block: 9px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #263d31; }
-.metric-list dt { color: #d3ddd5; font-size: 12px; }
+.metric-list div { min-height: 46px; padding-block: 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid #263d31; }
+.metric-list dt { display: grid; gap: 3px; color: #d3ddd5; font-size: 12px; }
+.metric-list dt small { color: #aebfb1; font-size: 12px; line-height: 1.35; }
 .metric-list dd { margin: 0; color: #b2c0b5; font-size: 12px; font-variant-numeric: tabular-nums; }
 .call-assessment { margin: 14px 0 4px; font-size: 13px; font-weight: 750; }
 .call-assessment[data-assessment="profitable"] { color: var(--green); }
-.call-assessment[data-assessment="unprofitable"] { color: var(--red); }
+.call-assessment[data-assessment="unprofitable"] { color: var(--gold); }
 .call-assessment[data-assessment="break_even"] { color: var(--gold); }
+.coach-limitations-title { margin-top: 15px; }
 .coach-advice, .coach-spr-warning { margin: 14px 0 0; color: #d6e2d8; font-size: 12px; line-height: 1.55; }
 .coach-spr-warning { padding: 10px 0; border-block: 1px solid #58643e; color: #e6d99a; }
+.coach-draws, .coach-limitations { margin: 10px 0 0; color: #c4d1c7; font-size: 11px; line-height: 1.5; }
+.coach-limitations { padding-left: 17px; }
+.coach-limitations li + li { margin-top: 4px; }
 .bet-purpose { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
 .bet-purpose > span { color: var(--gold); font-size: 12px; font-weight: 750; }
 .bet-purpose[data-purpose="value"] > span { color: var(--green); }
 .bet-purpose[data-purpose="bluff"] > span { color: var(--blue); }
-.bet-purpose[data-purpose="pointless"] > span { color: var(--red); }
+.bet-purpose[data-purpose="pointless"] > span { color: var(--gold); }
+.bet-purpose[data-purpose="unmodeled"] > span { color: var(--gold); }
 .bet-purpose p, .coach-method { margin: 5px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .coach-method { padding-top: 10px; border-top: 1px solid #263d31; font-variant-numeric: tabular-nums; }
 .coach-footnote { margin: auto 0 0; padding-top: 18px; color: var(--muted); font-size: 12px; line-height: 1.5; }
@@ -50,6 +67,17 @@
 .hand-review-list dd { margin: 3px 0 0; color: var(--ink); font-size: 12px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .review-actions, .decision-notes { margin: 9px 0; padding-left: 18px; color: #cad8cd; font-size: 11px; line-height: 1.55; }
 .decision-notes li + li, .review-actions li + li { margin-top: 4px; }
+.decision-lesson-review { margin-top: 7px; }
+.decision-lesson-review summary { color: #e6d99a; font-size: 11px; cursor: pointer; }
+.decision-lesson-review summary:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+.decision-lesson-review ol { margin: 7px 0 0; padding-left: 18px; }
+.decision-lesson-review li + li { margin-top: 7px; }
+.decision-lesson-review strong, .decision-lesson-review span { display: block; }
+.decision-lesson-review strong { color: #dfe9e1; }
+.decision-lesson-review span { margin-top: 3px; color: #bdcdbf; }
+.review-players, .variant-leak-flags { margin: 8px 0; padding-left: 18px; color: #cad8cd; font-size: 11px; line-height: 1.55; }
+.review-players li + li, .variant-leak-flags > li + li { margin-top: 5px; }
+.review-evidence { color: #c4d1c7; font-size: 11px; line-height: 1.5; }
 .leak-flag-list li { padding-block: 10px; border-bottom: 1px solid #263d31; }
 .leak-flag-list strong, .leak-flag-list span { display: block; }
 .leak-flag-list strong { color: #e7d69a; font-size: 12px; }

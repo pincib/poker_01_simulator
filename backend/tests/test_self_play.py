@@ -3,6 +3,7 @@
 import unittest
 
 from backend.simulation.self_play import RakePolicy, SelfPlaySimulator
+from backend.engine.rules import GameVariant
 
 
 class SelfPlayTests(unittest.TestCase):
@@ -27,6 +28,33 @@ class SelfPlayTests(unittest.TestCase):
         second = SelfPlaySimulator(seed=31).run(hands=50)
 
         self.assertEqual(first, second)
+
+    def test_seeded_plo_self_play_audits_ties_all_ins_folds_and_chips(self) -> None:
+        first = SelfPlaySimulator(
+            seed=20261026,
+            variant=GameVariant.POT_LIMIT_OMAHA,
+            starting_stack=200,
+            small_blind=1,
+            big_blind=2,
+        ).run(hands=500)
+        second = SelfPlaySimulator(
+            seed=20261026,
+            variant=GameVariant.POT_LIMIT_OMAHA,
+            starting_stack=200,
+            small_blind=1,
+            big_blind=2,
+        ).run(hands=500)
+
+        self.assertEqual(first, second)
+        self.assertEqual(first.variant, GameVariant.POT_LIMIT_OMAHA.value)
+        self.assertEqual(first.rake_collected, 0)
+        self.assertTrue(first.chips_conserved)
+        self.assertEqual(first.deadlocks, 0)
+        self.assertGreater(first.showdowns, 0)
+        self.assertGreater(first.ties, 0)
+        self.assertGreater(first.all_in_hands, 0)
+        self.assertGreater(first.all_in_events, 0)
+        self.assertGreater(first.fold_actions, 0)
 
 
 if __name__ == "__main__":

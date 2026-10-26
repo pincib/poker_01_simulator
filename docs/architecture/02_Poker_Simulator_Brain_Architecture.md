@@ -47,8 +47,8 @@ flowchart TD
 
     subgraph AIEngine ["5. Decision & Strategy AI"]
         TreeSearch["Decision Tree Evaluator"]
-        BetSizer["GTO Bet Sizing Engine (33%, 50%, 75%, Pot)"]
-        Persona["Player Personas (TAG, LAG, Calling Station, GTO)"]
+        BetSizer["Heuristic Bet Sizing Engine (33%, 50%, 75%, Pot)"]
+        Persona["Player Personas (tight, aggressive, calling station, balanced heuristic)"]
     end
 
     subgraph Coach ["6. Real-Time Coach & Leak Detector"]
@@ -270,7 +270,7 @@ The simulator includes distinct AI player profiles:
 | **Calling Station (Fish)** | 48% / 8% | 30% | < 2% | Calls almost any bet with any pair or draw. Never bluffs. Exploit: Pure value betting. |
 | **TAG (Tight-Aggressive)** | 21% / 18% | 65% | 20% | Disciplined hand selection; bets aggressively for value and with equity draws. |
 | **LAG (Loose-Aggressive)** | 28% / 24% | 72% | 35% | Puts relentless pressure on opponents; utilizes position and blockers to run multi-street bluffs. |
-| **GTO Bot (Balanced)** | Adaptive | Balanced ($\approx 60\%$) | Mathematically unexploitable | Maintains balanced value-to-bluff ratios on every street. |
+| **Balanced heuristic baseline** | Adaptive | Profile-configured | Heuristic only | A simple configurable baseline; it is not a solver and makes no optimality claim. |
 
 ---
 
