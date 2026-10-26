@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#0b1c16">
+    <meta name="description" content="A local poker training simulator and coaching workspace.">
+    <title>Poker Mastery Simulator</title>
+    <link rel="stylesheet" href="/css/table.css">
+    <link rel="stylesheet" href="/css/hud.css">
+    <script type="module" src="/js/app.js"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="Poker Mastery Simulator home">
+          <span class="brand-mark" aria-hidden="true">PM</span>
+          <span class="brand-copy"><strong>Poker Mastery</strong><span>TRAINING TABLE</span></span>
+        </a>
+        <div class="topbar-meta">
+          <span class="local-label"><span class="local-dot"></span>Runs on this device</span>
+          <button id="coach-mode-toggle" class="coach-top-toggle" type="button" aria-pressed="true">Coach on</button>
+          <span id="service-status" class="service-status" role="status" aria-live="polite">
+            <span class="status-dot"></span><span>Connecting</span>
+          </span>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <section class="practice-heading" aria-labelledby="page-title">
+          <div>
+            <h1 id="page-title">Training table</h1>
+            <p class="intro">Play a hand, then review the decision with the numbers that matter.</p>
+          </div>
+          <div class="game-select-wrap">
+            <label for="game-variant">Game</label>
+            <select id="game-variant" disabled aria-describedby="variant-note">
+              <option value="texas_holdem">Texas Hold’em</option>
+            </select>
+            <span id="variant-note" class="visually-hidden">Texas Hold’em is playable now. Pot-Limit Omaha is planned for a later phase.</span>
+          </div>
+        </section>
+
+        <div class="practice-grid">
+          <section class="table-panel" aria-labelledby="table-title">
+            <div class="panel-heading">
+              <div>
+                <h2 id="table-title">Texas Hold’em</h2>
+                <span class="table-meta" id="table-meta">6-max · No-limit · $1/$2</span>
+              </div>
+              <span id="table-hand-status" class="hand-state"><span class="status-dot"></span><span id="table-hand-label">Waiting for a hand</span></span>
+            </div>
+
+            <div class="table-stage">
+              <div class="table-oval" id="poker-table" aria-label="Six-handed Texas Hold’em table">
+                <div id="table-seats" class="table-seats" aria-label="Players"></div>
+                <div class="table-center">
+                  <div class="pot-strip">
+                    <div class="pot-readout"><span>Pot</span><strong id="table-pot">$0.00</strong></div>
+                    <span class="table-divider" aria-hidden="true"></span>
+                    <div class="pot-readout"><span>SPR</span><strong id="table-spr">—</strong></div>
+                    <span class="table-divider" aria-hidden="true"></span>
+                    <div class="pot-readout"><span>Round</span><strong id="table-street">Waiting</strong></div>
+                  </div>
+                  <div id="community-cards" class="community-cards" aria-label="Community cards"></div>
+                  <p id="table-message" class="empty-table-message" role="status" aria-live="polite">Deal a hand to begin. Your cards stay private.</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="table-footer">
+              <div class="stack-readout"><span>Your stack</span><strong id="hero-stack">$200.00</strong></div>
+              <button id="deal-button" class="primary-button" type="button">Deal hand</button>
+            </div>
+            <section id="action-bar" class="action-bar" aria-label="Poker actions" hidden>
+              <div class="action-context">
+                <strong id="action-prompt">Your action</strong>
+                <span id="action-hint">Space check · F fold · C call · B half-pot bet</span>
+              </div>
+              <div class="action-controls">
+                <button id="fold-button" class="action-button fold-button" type="button" data-action="fold">Fold <kbd>F</kbd></button>
+                <button id="call-check-button" class="action-button call-button" type="button" data-action="check">Check <kbd>Space</kbd></button>
+                <div id="size-presets" class="size-presets" aria-label="Bet sizing presets">
+                  <button class="size-button" type="button" data-pot-fraction="0.33">⅓ pot</button>
+                  <button class="size-button selected" type="button" data-pot-fraction="0.5">½ pot <kbd>B</kbd></button>
+                  <button class="size-button" type="button" data-pot-fraction="1">Pot</button>
+                </div>
+                <label class="size-input-wrap" for="raise-to-input">
+                  <span id="raise-to-label">Bet to</span>
+                  <input id="raise-to-input" type="number" inputmode="numeric" min="2" step="1" value="2">
+                </label>
+                <button id="bet-button" class="action-button bet-button" type="button" data-action="bet">Bet ½ pot</button>
+                <button id="all-in-button" class="action-button all-in-button" type="button" data-action="all_in">All-in</button>
+              </div>
+              <p id="action-status" class="action-status" role="status" aria-live="polite"></p>
+            </section>
+          </section>
+
+          <aside id="coach-panel" class="coach-panel" aria-labelledby="coach-title">
+            <div class="coach-heading">
+              <div>
+                <h2 id="coach-title">Coach</h2>
+              </div>
+            </div>
+
+            <div id="coach-content">
+              <p id="coach-state" class="coach-state" role="status">Ready when you play</p>
+              <div id="coach-empty" class="coach-empty">
+                <div class="decision-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+                <h3>Numbers at the decision</h3>
+                <p>Pot odds, estimated equity, and SPR appear here when a hand is connected.</p>
+              </div>
+
+              <div id="coach-snapshot" class="coach-snapshot" hidden aria-live="polite">
+                <p id="call-assessment" class="call-assessment" data-assessment="no_call">No call to price</p>
+                <dl class="metric-list">
+                  <div><dt>Pot odds</dt><dd id="coach-pot-odds">—</dd></div>
+                  <div><dt>Estimated equity</dt><dd id="coach-equity">—</dd></div>
+                  <div><dt>Call EV</dt><dd id="coach-ev">—</dd></div>
+                  <div><dt>SPR</dt><dd id="coach-spr">—</dd></div>
+                  <div><dt>Current hand</dt><dd id="coach-hand">—</dd></div>
+                </dl>
+                <p id="coach-advice" class="coach-advice"></p>
+                <p id="coach-spr-warning" class="coach-spr-warning" hidden></p>
+                <div id="bet-purpose" class="bet-purpose" hidden>
+                  <span id="bet-purpose-label"></span>
+                  <p id="bet-purpose-evidence"></p>
+                </div>
+                <p id="coach-method" class="coach-method"></p>
+              </div>
+            </div>
+            <p class="coach-footnote">Equity describes expected share, not the result of the next hand.</p>
+          </aside>
+        </div>
+
+        <section class="review-panel" aria-labelledby="review-title">
+          <div class="review-heading">
+            <div>
+              <h2 id="review-title">Session review</h2>
+              <p>Reconstruct a hand before judging the result.</p>
+            </div>
+            <button id="refresh-review" class="quiet-button" type="button">Refresh review</button>
+          </div>
+          <div class="review-layout">
+            <div class="review-hands">
+              <h3>Recent hands</h3>
+              <p id="review-status" class="review-empty">Completed hands will appear here with cards, actions, and decision notes.</p>
+              <ol id="hand-review-list" class="hand-review-list"></ol>
+            </div>
+            <div class="weekly-review">
+              <h3>Weekly study target</h3>
+              <p id="leak-study-target">Add reviewed hands to find a repeated decision worth studying.</p>
+              <ul id="leak-flag-list" class="leak-flag-list"></ul>
+              <ol id="weekly-plan" class="weekly-plan"></ol>
+            </div>
+          </div>
+        </section>
+
+        <section class="stack-note" aria-label="Application stack">
+          <div><span class="stack-icon" aria-hidden="true">PY</span><span><strong>Python standard library</strong><small>Local server, no package setup</small></span></div>
+          <span class="note-divider" aria-hidden="true"></span>
+          <div><span class="stack-icon browser-icon" aria-hidden="true">&lt;/&gt;</span><span><strong>Native browser client</strong><small>HTML · CSS · JavaScript</small></span></div>
+          <span class="stack-caption">No third-party runtime required</span>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
