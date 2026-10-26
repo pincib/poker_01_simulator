@@ -229,10 +229,37 @@ class CoachService:
         if not opponents:
             raise ValueError("Live coach analysis requires an active opponent.")
         opponent = max(opponents, key=lambda player: player.current_bet)
-        last_action = next(
-            (record.action for record in reversed(state.action_history) if record.player_id == opponent.id),
-            None,
-        )
+        if len(opponents) > 1 and opponent_id is None:
+            known = hero.hole_cards + state.community_cards
+            opponent_ranges = []
+            range_was_filtered = False
+            for active_opponent in opponents:
+                preflop_action = next((
+                    record.action for record in reversed(state.action_history)
+                    if record.player_id == active_opponent.id and record.street is Street.PREFLOP
+                ), None)
+                starting_range = get_opening_range(active_opponent.position or Position.BUTTON)
+                if preflop_action is not None:
+                    starting_range = starting_range.filtered_by_action(preflop_action)
+                    range_was_filtered = True
+                opponent_ranges.append(starting_range.to_combos(known))
+            return cls.analyze_decision(
+                hero_hole=hero.hole_cards,
+                board=state.community_cards,
+                pot=state.pot,
+                call_amount=max(0, state.current_bet - hero.current_bet),
+                hero_stack=hero.stack,
+                opponent_stack=min(player.stack for player in opponents),
+                opponent_ranges=opponent_ranges,
+                big_blind=state.big_blind,
+                iterations=256,
+                seed=None,
+                opponent_ranges_action_filtered=range_was_filtered,
+            )
+        preflop_action = next((
+            record.action for record in reversed(state.action_history)
+            if record.player_id == opponent.id and record.street is Street.PREFLOP
+        ), None)
         return cls.analyze_decision(
             hero_hole=hero.hole_cards,
             board=state.community_cards,
@@ -241,7 +268,7 @@ class CoachService:
             hero_stack=hero.stack,
             opponent_stack=opponent.stack,
             opponent_position=opponent.position or Position.BUTTON,
-            opponent_last_action=last_action,
+            opponent_last_action=preflop_action,
             big_blind=state.big_blind,
             iterations=iterations,
             seed=seed,
@@ -260,6 +287,8 @@ class CoachService:
         opponent_last_action: object | None = None,
         opponent_hole: Sequence[Card] | None = None,
         opponent_range: Sequence[Sequence[Card]] | None = None,
+        opponent_ranges: Sequence[Sequence[Sequence[Card]]] | None = None,
+        opponent_ranges_action_filtered: bool = False,
         big_blind: int = 1,
         iterations: int = 1_000,
         seed: int | None = None,
@@ -273,8 +302,8 @@ class CoachService:
         _non_negative_chips("Big blind", big_blind)
         if big_blind == 0:
             raise ValueError("Big blind must be greater than zero.")
-        if opponent_hole is not None and opponent_range is not None:
-            raise ValueError("Provide either opponent cards or an opponent range, not both.")
+        if sum(value is not None for value in (opponent_hole, opponent_range, opponent_ranges)) > 1:
+            raise ValueError("Provide opponent cards or one opponent range model, not multiple models.")
 
         blockers = hero + community
         if len(set(blockers)) != len(blockers):
@@ -287,6 +316,17 @@ class CoachService:
             result = EquityCalculator.calculate(
                 hero, villain_hole=villain, board=community, iterations=iterations, seed=seed
             )
+        elif opponent_ranges is not None:
+            if len(opponent_ranges) < 2:
+                raise ValueError("Multiway analysis requires at least two opponent ranges.")
+            result = EquityCalculator.calculate_multiway(
+                hero,
+                opponent_ranges,
+                board=community,
+                iterations=iterations,
+                seed=seed,
+            )
+            source = "action-filtered multiway ranges" if opponent_ranges_action_filtered else "estimated multiway ranges"
         else:
             candidates = tuple(tuple(combo) for combo in opponent_range) if opponent_range is not None else None
             if candidates is None:

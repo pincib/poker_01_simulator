@@ -61,6 +61,18 @@ class MathEngineTests(unittest.TestCase):
         self.assertEqual(result.iterations, 100)
         self.assertAlmostEqual(result.win_percentage + result.tie_percentage + result.loss_percentage, 100.0)
 
+    def test_multiway_equity_splits_a_three_player_tie_by_pot_share(self) -> None:
+        result = EquityCalculator.calculate_multiway(
+            hero_hole=cards("As", "Kd"),
+            opponent_ranges=((cards("Ah", "Qd"),), (cards("Ac", "Jd"),)),
+            board=cards("2c", "3d", "4h", "5s", "9c"),
+            iterations=12,
+            seed=19,
+        )
+
+        self.assertEqual((result.win_percentage, result.tie_percentage, result.loss_percentage), (0.0, 100.0, 0.0))
+        self.assertAlmostEqual(result.equity_percentage, 100 / 3)
+
     def test_flush_draw_reports_nine_outs_and_marks_higher_flush_as_dirty(self) -> None:
         result = DrawDetector.analyze(
             hero_hole=cards("9h", "8h"),

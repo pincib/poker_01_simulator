@@ -1,6 +1,7 @@
 """Training-table regressions for coach feedback and completed-hand reveals."""
 
 import unittest
+from unittest.mock import patch
 
 from backend.brain.coach import SessionTracker
 from backend.engine.deck import Deck
@@ -43,11 +44,31 @@ class TrainingTableTests(unittest.TestCase):
         self.assertIsNotNone(result["coach"])
         self.assertIn("equity_percentage", result["coach"])
 
+    def test_live_coach_estimates_equity_against_multiple_active_opponents(self) -> None:
+        table = TrainingTable(SessionTracker())
+        table._state = GameState.new_hand(players(3), 1, 2, button_index=0, deck=Deck(seed=29))
+        table._hand_number = 1
+
+        result = table.snapshot()
+
+        self.assertEqual(result["current_player_id"], "hero")
+        self.assertTrue(result["multiway"])
+        self.assertEqual(result["coach_context"], "current_decision")
+        self.assertIsNotNone(result["coach"])
+        self.assertIn("multiway", result["coach"]["equity_source"])
+
     def test_fold_win_reveals_only_surviving_opponent_and_reports_real_street(self) -> None:
         table = TrainingTable(SessionTracker())
         state = GameState.new_hand(players(3), 1, 2, button_index=0, deck=Deck(seed=23))
+        while state.street is not Street.FLOP:
+            actor = state.current_player
+            assert actor is not None
+            legal = state.legal_actions()
+            action = ActionType.CHECK if ActionType.CHECK in legal else ActionType.CALL
+            state = state.apply_action(actor.id, action)
+        state = state.apply_action("bot-1", ActionType.FOLD)
+        state = state.apply_action("bot-2", ActionType.CHECK)
         state = state.apply_action("hero", ActionType.FOLD)
-        state = state.apply_action(state.current_player_id, ActionType.FOLD)
         table._state = state
         table._hand_number = 1
 
@@ -55,7 +76,8 @@ class TrainingTableTests(unittest.TestCase):
         seats = {seat["id"]: seat for seat in result["seats"]}
 
         self.assertTrue(result["hand_complete"])
-        self.assertEqual(result["street"], "preflop")
+        self.assertEqual(result["street"], "flop")
+        self.assertEqual(len(result["board"]), 3)
         self.assertEqual(len(seats["bot-2"]["hole_cards"]), 2)
         self.assertFalse(seats["bot-2"]["cards_hidden"])
         self.assertEqual(seats["bot-1"]["hole_cards"], [])
@@ -71,6 +93,20 @@ class TrainingTableTests(unittest.TestCase):
         self.assertEqual(result["coach_context"], "last_decision")
         self.assertIsNotNone(result["coach"])
         self.assertTrue(result["hand_complete"])
+
+    def test_coach_analysis_error_does_not_block_a_legal_action(self) -> None:
+        table = TrainingTable(SessionTracker())
+        table._state = GameState.new_hand(players(2), 1, 2, button_index=0, deck=Deck(seed=37))
+        table._hand_number = 1
+
+        with patch.object(table, "_coach_for", side_effect=ValueError("No modeled range.")):
+            result = table.act("call")
+
+        self.assertTrue(any(
+            action.player_id == "hero" and action.action is ActionType.CALL
+            for action in table._state.action_history
+        ))
+        self.assertTrue(result["started"])
 
     def test_showdown_reveals_all_remaining_hands(self) -> None:
         table = TrainingTable(SessionTracker())

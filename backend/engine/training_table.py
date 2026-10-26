@@ -84,9 +84,15 @@ class TrainingTable:
             call_amount = state.amount_to_call
             active_opponents = [player for player in state.players if player.id != self.hero_id and player.is_active]
             coach = None
+            coach_error: str | None = None
             bet_purpose = None
-            if len(active_opponents) == 1:
-                coach = self._coach_for(state, active_opponents[0])
+            if active_opponents:
+                try:
+                    coach = self._coach_for(state, active_opponents[0] if len(active_opponents) == 1 else None)
+                except ValueError as exc:
+                    # Coaching must never prevent a legal poker action.
+                    coach_error = str(exc)
+            if coach is not None and len(active_opponents) == 1:
                 if action in (ActionType.BET, ActionType.RAISE, ActionType.ALL_IN):
                     target = amount_value if isinstance(amount_value, int) else hero.current_bet + hero.stack
                     try:
@@ -102,13 +108,13 @@ class TrainingTable:
                         bet_purpose = purpose.purpose.value
                     except ValueError:
                         bet_purpose = None
-            else:
+            if coach is None:
                 self._decisions.append(DecisionNote(
                     street=state.street.value,
                     action=action.value,
                     chips=call_amount if action is ActionType.CALL else max(0, int(amount_value or 0) - hero.current_bet),
                     pot_before=pot_before,
-                    rationale="Action taken at a six-handed table; multiway equity is not modeled by the current coach.",
+                    rationale=coach_error or "No opponent model was available when this decision was made.",
                     review_question="What range and future-street plan support this decision?",
                 ))
             before_count = len(self._decisions)
@@ -189,14 +195,16 @@ class TrainingTable:
                         "open Session review to inspect the actions."
                     )
             elif state.current_player_id == self.hero_id:
-                if len(active_opponents) == 1:
+                if active_opponents:
                     try:
-                        coach_snapshot = self._coach_for(state, active_opponents[0]).to_dict()
+                        coach_snapshot = self._coach_for(
+                            state, active_opponents[0] if len(active_opponents) == 1 else None
+                        ).to_dict()
                         coach_context = "current_decision"
                     except ValueError as exc:
                         coach_note = str(exc)
-                elif len(active_opponents) > 1:
-                    coach_note = "The equity estimate currently supports one opponent. Use the pot price and each caller's range; review the action below after the hand."
+                else:
+                    coach_note = "No active opponent is available for an equity estimate."
             min_raise = state.current_bet + state.last_full_raise_size
             max_raise = hero.current_bet + hero.stack
             spr_value = None
@@ -280,18 +288,23 @@ class TrainingTable:
             raise ValueError("Start a hand before taking an action.")
         return self._state
 
-    def _coach_for(self, state: GameState, opponent: Player) -> CoachSnapshot:
+    def _coach_for(self, state: GameState, opponent: Player | None) -> CoachSnapshot:
+        active_opponents = tuple(
+            player.id for player in state.players
+            if player.id != self.hero_id and player.is_active
+        )
         key = (
             self._hand_number,
             len(state.action_history),
             state.street.value,
             state.current_player_id,
             state.pot,
+            opponent.id if opponent else active_opponents,
             tuple(card.code for card in state.community_cards),
         )
         if key != self._coach_cache_key or self._coach_cache is None:
             self._coach_cache = CoachService.analyze_state(
-                state, self.hero_id, opponent.id, iterations=256
+                state, self.hero_id, opponent.id if opponent else None, iterations=256
             )
             self._coach_cache_key = key
         return self._coach_cache
