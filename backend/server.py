@@ -38,14 +38,14 @@ class SimulatorRequestHandler(SimpleHTTPRequestHandler):
                 "rule_variants": ["texas_holdem", "pot_limit_omaha"],
                 "variants": {
                     "texas_holdem": {
-                        "label": "Texas Hold'em",
+                        "label": "Texas Hold’em",
                         "hole_card_count": 2,
                         "betting_structure": "no_limit",
                         "min_players": 2,
                         "max_players": 6,
                     },
                     "pot_limit_omaha": {
-                        "label": "Pot-Limit Omaha",
+                        "label": "Omaha Pot-Limit",
                         "hole_card_count": 4,
                         "betting_structure": "pot_limit",
                         "min_players": 2,
@@ -68,15 +68,15 @@ class SimulatorRequestHandler(SimpleHTTPRequestHandler):
             hand_id = unquote(parsed.path.rsplit("/", 1)[-1])
             hand = SESSION_TRACKER.get_hand(hand_id)
             if hand is None:
-                self._send_json({"error": "Hand review not found."}, 404)
+                self._send_json({"error": "Revisão da mão não encontrada."}, 404)
             else:
                 self._send_json(hand.to_dict())
             return
         if parsed.path.startswith("/api/"):
-            self._send_json({"error": "API route not found."}, 404)
+            self._send_json({"error": "Rota da API não encontrada."}, 404)
             return
         if parsed.path in ("/", "/index.html") and not (FRONTEND_ROOT / "index.html").is_file():
-            self._send_error_json(503, "The browser client has not been created yet.")
+            self._send_error_json(503, "A interface do navegador ainda não foi criada.")
             return
         super().do_GET()
 
@@ -132,7 +132,7 @@ class SimulatorRequestHandler(SimpleHTTPRequestHandler):
                     payload.get("action"), payload.get("amount"), variant=payload.get("variant")
                 ))
                 return
-            self._send_json({"error": "API route not found."}, 404)
+            self._send_json({"error": "Rota da API não encontrada."}, 404)
         except (KeyError, TypeError, ValueError) as exc:
             self._send_json({"error": str(exc)}, 400)
 
@@ -140,15 +140,15 @@ class SimulatorRequestHandler(SimpleHTTPRequestHandler):
         try:
             content_length = int(self.headers.get("Content-Length", "0"))
         except ValueError as exc:
-            raise ValueError("Content-Length must be an integer.") from exc
+            raise ValueError("O tamanho do conteúdo deve ser um número inteiro.") from exc
         if content_length <= 0 or content_length > 1_000_000:
-            raise ValueError("Request body must be between 1 byte and 1 MB.")
+            raise ValueError("O corpo da solicitação deve ter entre 1 byte e 1 MB.")
         try:
             payload = json.loads(self.rfile.read(content_length))
         except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-            raise ValueError("Request body must contain valid JSON.") from exc
+            raise ValueError("O corpo da solicitação deve conter JSON válido.") from exc
         if not isinstance(payload, dict):
-            raise ValueError("Request JSON must be an object.")
+            raise ValueError("O JSON da solicitação deve ser um objeto.")
         return payload
 
     def _send_json(self, payload: dict[str, object], status: int = 200) -> None:
@@ -174,7 +174,7 @@ def main(port: int = 8000, *, open_browser: bool = True) -> None:
 
     server = create_server(port)
     url = f"http://127.0.0.1:{server.server_port}/"
-    print(f"Poker simulator running at {url}")
+    print(f"Simulador de poker em execução em {url}")
     if open_browser:
         webbrowser.open(url)
     try:

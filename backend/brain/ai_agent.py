@@ -142,7 +142,8 @@ class OpponentAI:
         self.decision_history: list[AIDecision] = []
 
     def decide(
-        self, state: GameState, player_id: str, opponent_id: str | None = None, *, seed: int | None = None
+        self, state: GameState, player_id: str, opponent_id: str | None = None, *,
+        seed: int | None = None, allow_fold: bool = True,
     ) -> AIDecision:
         """Choose a legal action for the current player without reading opponents' cards."""
         player = state.current_player
@@ -150,7 +151,7 @@ class OpponentAI:
             raise ValueError("AI can decide only for the player currently waiting to act.")
         if len(player.hole_cards) != state.rules.hole_card_count:
             raise ValueError("AI player's private-card count does not match the game variant.")
-        legal = state.legal_actions()
+        legal = state.legal_actions(allow_fold=allow_fold)
         opponents = [candidate for candidate in state.players if candidate.id != player_id and candidate.is_active]
         if opponent_id is not None:
             opponents = [candidate for candidate in opponents if candidate.id == opponent_id]
@@ -257,10 +258,10 @@ class OpponentAI:
                     f"{summary} Call threshold {call_threshold:.1f}% covers pot odds {pot_odds:.1f}%; heuristic profile decision.",
                     equity=equity, pot_odds=pot_odds,
                 ))
-            if ActionType.FOLD in legal:
+            if ActionType.CALL in legal:
                 return with_range_size(self._decision(
-                    ActionType.FOLD,
-                    f"{summary} Estimated equity is below the profile's {call_threshold:.1f}% call threshold.",
+                    ActionType.CALL,
+                    f"{summary} Continues despite equity below the profile's {call_threshold:.1f}% threshold.",
                     equity=equity, pot_odds=pot_odds,
                 ))
 
@@ -355,8 +356,8 @@ class OpponentAI:
                     reason=f"{summary} Opens within the profile's position-adjusted PLO range.",
                 )
             return self._decision(ActionType.CHECK, f"{summary} No raise is currently available.")
-        action = ActionType.FOLD if call > 0 and ActionType.FOLD in legal else ActionType.CHECK
-        return self._decision(action, f"{summary} Folds or checks outside the starting-hand threshold.")
+        action = ActionType.CALL if call > 0 and ActionType.CALL in legal else ActionType.CHECK
+        return self._decision(action, f"{summary} Continues at the current price or checks outside the starting-hand threshold.")
 
     def _sample_plo_opponent_range(
         self, state: GameState, hero: Player, opponent: Player, seed: int
@@ -472,7 +473,7 @@ class OpponentAI:
             else:
                 continue_hand = frequency > 0 and self._random.random() < frequency
             if not continue_hand:
-                return self._decision(ActionType.FOLD, "Outside the profile's preflop continuing range.")
+                return self._decision(ActionType.CALL, "Continues at the current price outside the profile's usual preflop range.")
             premium_frequency = get_opening_range(position, 10.0).frequency_for(player.hole_cards)
             strong = premium_frequency >= 0.9
             if strong and ActionType.RAISE in legal and self._random.random() < self._preflop_raise_frequency():
@@ -523,7 +524,7 @@ class OpponentAI:
                 return self._decision(ActionType.CALL, "Equity meets this profile's calling threshold.", equity=equity, pot_odds=pot_odds)
             if equity >= self._value_raise_threshold() and ActionType.RAISE in legal:
                 return self._aggressive_decision(state, player, texture, legal, equity, pot_odds, facing_bet=True)
-            return self._decision(ActionType.FOLD, "Estimated equity does not justify continuing.", equity=equity, pot_odds=pot_odds)
+            return self._decision(ActionType.CALL, "Continues despite equity below the profile's usual threshold.", equity=equity, pot_odds=pot_odds)
 
         value_threshold = {
             OpponentProfile.NIT: 72.0,

@@ -32,6 +32,18 @@ def finish_uncontested_showdown(state: GameState) -> GameState:
 
 
 class TrainingTableTests(unittest.TestCase):
+    def test_fresh_hand_keeps_every_bot_active_and_never_records_bot_folds(self) -> None:
+        table = TrainingTable(SessionTracker())
+
+        result = table.start_hand()
+
+        self.assertEqual(result["current_player_id"], "hero")
+        self.assertTrue(all(seat["active"] for seat in result["seats"]))
+        self.assertFalse(any(
+            record.action is ActionType.FOLD and record.player_id != "hero"
+            for record in table._state.action_history
+        ))
+
     def test_live_coach_snapshot_is_attached_to_a_heads_up_decision(self) -> None:
         table = TrainingTable(SessionTracker())
         table._state = GameState.new_hand(players(2), 1, 2, button_index=0, deck=Deck(seed=17))

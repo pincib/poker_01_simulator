@@ -1,10 +1,22 @@
 const byId = (id) => document.getElementById(id);
 
 const assessmentCopy = {
-  profitable: { label: "Estimate above the call price", state: "profitable" },
-  unprofitable: { label: "Estimate below the call price", state: "unprofitable" },
-  break_even: { label: "Estimate near break-even", state: "break_even" },
-  no_call: { label: "No call to price", state: "no_call" },
+  profitable: { label: "Estimativa acima do preço do call", state: "profitable" },
+  unprofitable: { label: "Estimativa abaixo do preço do call", state: "unprofitable" },
+  break_even: { label: "Estimativa próxima do zero a zero", state: "break_even" },
+  no_call: { label: "Sem call para avaliar", state: "no_call" },
+};
+
+const equitySourceCopy = {
+  "known opponent hand": "cartas do adversário conhecidas",
+  "provided opponent range": "faixa fornecida para análise",
+  "estimated opponent range": "faixa estimada do adversário",
+  "action-filtered opponent range": "faixa estimada pela posição e ação",
+  "uniform four-card combinations": "mãos de quatro cartas amostradas",
+  "uniform sampled PLO4 combinations, position/action adjusted by a simple heuristic": "combinações aleatórias de PLO4, ajustadas por posição e ação com uma heurística simples",
+  "position/action filtered Hold'em opening ranges": "faixas de abertura do Hold’em filtradas por posição e ação",
+  "estimated multiway ranges": "faixas estimadas para vários adversários",
+  "action-filtered multiway ranges": "faixas multiway estimadas",
 };
 
 let lessonSteps = [];
@@ -31,9 +43,10 @@ export function renderCoachSnapshot(snapshot) {
   byId("coach-pot-odds").textContent = formatPercent(snapshot.pot_odds_percentage);
   byId("coach-equity").textContent = formatPercent(snapshot.equity_share_percentage ?? snapshot.equity_percentage);
   byId("coach-ev").textContent = formatChips(snapshot.ev_call);
-  byId("coach-spr").textContent = snapshot.spr_value == null ? "—" : Number(snapshot.spr_value).toFixed(1);
+  byId("coach-spr").textContent = snapshot.spr_value == null ? "—" : Number(snapshot.spr_value).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   byId("coach-hand").textContent = snapshot.hand_description || "—";
-  byId("coach-advice").textContent = snapshot.advice || "";
+  byId("coach-advice").textContent = localizeDecimals(snapshot.advice || "");
+  renderEquityCharts(snapshot);
 
   const drawNode = byId("coach-draws");
   const draw = snapshot.draw_analysis;
@@ -43,17 +56,17 @@ export function renderCoachSnapshot(snapshot) {
     const nonNutOuts = Array.isArray(draw.non_nut_outs) ? draw.non_nut_outs : [];
     const parts = [];
     if (straightOuts.length) {
-      parts.push(`${draw.is_wrap ? "Wrap" : "Straight draw"}: ${straightOuts.length} distinct cards (${formatCards(straightOuts)})`);
+      parts.push(`${draw.is_wrap ? "Wrap" : "Draw de sequência"}: ${straightOuts.length} cartas distintas (${formatCards(straightOuts)})`);
     }
     if (nutOuts.length || nonNutOuts.length) {
-      parts.push(`${nutOuts.length} nut improvements · ${nonNutOuts.length} non-nut improvements`);
+      parts.push(`${nutOuts.length} melhorias para nuts · ${nonNutOuts.length} outras melhorias`);
     }
     if (Array.isArray(draw.unverified_outs) && draw.unverified_outs.length) {
-      parts.push("clean-out status unverified; opponents’ cards are hidden");
+      parts.push("não foi possível confirmar se os outs são limpos; as cartas dos adversários estão ocultas");
     }
     drawNode.textContent = parts.length
-      ? `Omaha draw check · ${parts.join(" · ")}`
-      : "No next-card draw detected. A made hand can still change as the board runs out.";
+      ? `Análise de draws no Omaha · ${parts.join(" · ")}`
+      : "Nenhum draw para a próxima carta foi identificado. Uma mão pronta ainda pode mudar conforme o board é completado.";
     drawNode.hidden = false;
   } else {
     drawNode.textContent = "";
@@ -69,25 +82,54 @@ export function renderCoachSnapshot(snapshot) {
   byId("coach-limitations-title").hidden = limitations.hidden;
 
   const warning = byId("coach-spr-warning");
-  warning.textContent = snapshot.spr_warning || "";
+  warning.textContent = localizeDecimals(snapshot.spr_warning || "");
   warning.hidden = !snapshot.spr_warning;
   const method = [];
-  if (snapshot.deterministic) method.push("Exact calculation · opponent cards known");
-  else if (snapshot.iterations) method.push(`Estimate · ${Number(snapshot.iterations).toLocaleString()} simulated outcomes`);
-  const sources = {
-    "known opponent hand": "opponent cards known",
-    "provided opponent range": "range supplied for analysis",
-    "estimated opponent range": "estimated opponent range",
-    "action-filtered opponent range": "range estimated from position and action",
-    "uniform four-card combinations": "sampled four-card hands",
-    "estimated multiway ranges": "estimated ranges for multiple opponents",
-    "action-filtered multiway ranges": "estimated multiway ranges",
-  };
-  if (snapshot.equity_source) method.push(sources[snapshot.equity_source] || "modeled opponent range");
-  if (snapshot.opponent_range_size != null) method.push(`${Number(snapshot.opponent_range_size).toLocaleString()} combinations considered`);
-  if (snapshot.seed != null) method.push(`reproduction seed ${snapshot.seed}`);
+  if (snapshot.deterministic) method.push("Cálculo exato · cartas do adversário conhecidas");
+  else if (snapshot.iterations) method.push(`Estimativa · ${Number(snapshot.iterations).toLocaleString()} resultados simulados`);
+  if (snapshot.equity_source) method.push(localizeEquitySource(snapshot.equity_source));
+  if (snapshot.opponent_range_size != null) method.push(`${Number(snapshot.opponent_range_size).toLocaleString("pt-BR")} combinações consideradas`);
+  if (snapshot.seed != null) method.push(`semente para reproduzir o cálculo: ${snapshot.seed}`);
   byId("coach-method").textContent = method.filter(Boolean).join(" · ");
-  byId("coach-state").textContent = "Let’s work through this decision";
+  byId("coach-state").textContent = "Vamos analisar esta decisão";
+}
+
+function renderEquityCharts(snapshot) {
+  const outcomes = [
+    ["win", snapshot.win_percentage],
+    ["tie", snapshot.tie_percentage],
+    ["loss", snapshot.loss_percentage],
+  ];
+  const outcomeLabel = { win: "vitória", tie: "empate", loss: "derrota" };
+  const summary = [];
+  for (const [key, value] of outcomes) {
+    const percentage = clampPercentage(value);
+    byId(`outcome-${key}`).style.width = `${percentage}%`;
+    byId(`outcome-${key}-value`).textContent = formatPercent(percentage);
+    summary.push(`${outcomeLabel[key]}: ${formatPercent(percentage)}`);
+  }
+  byId("outcome-chart").setAttribute("aria-label", `Resultados estimados: ${summary.join(", ")}`);
+
+  const equity = clampPercentage(snapshot.equity_share_percentage ?? snapshot.equity_percentage);
+  const odds = snapshot.pot_odds_percentage == null ? null : clampPercentage(snapshot.pot_odds_percentage);
+  byId("equity-fill").style.width = `${equity}%`;
+  byId("equity-marker").style.left = `${equity}%`;
+  byId("chart-equity-value").textContent = formatPercent(equity);
+  byId("pot-odds-legend").hidden = odds == null;
+  byId("pot-odds-marker").hidden = odds == null;
+  byId("chart-call-note").hidden = odds != null;
+  if (odds != null) {
+    byId("pot-odds-marker").style.left = `${odds}%`;
+    byId("chart-pot-odds-value").textContent = formatPercent(odds);
+    byId("equity-chart").setAttribute("aria-label", `Equity estimada ${formatPercent(equity)}; pot odds ${formatPercent(odds)}`);
+  } else {
+    byId("equity-chart").setAttribute("aria-label", `Equity estimada ${formatPercent(equity)}; não há call para pagar`);
+  }
+}
+
+function clampPercentage(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.min(100, Math.max(0, number)) : 0;
 }
 
 function renderLessonStep() {
@@ -98,12 +140,49 @@ function renderLessonStep() {
     return;
   }
   lesson.hidden = false;
-  byId("lesson-label").textContent = step.label || "DECISION LESSON";
-  byId("lesson-count").textContent = `Step ${lessonIndex + 1} of ${lessonSteps.length}`;
-  byId("lesson-title").textContent = step.title || "Think through the spot";
-  byId("lesson-body").textContent = step.body || "Use the current action and its price to make a plan.";
+  byId("lesson-label").textContent = step.label || "LIÇÃO SOBRE A DECISÃO";
+  byId("lesson-count").textContent = `Etapa ${lessonIndex + 1} de ${lessonSteps.length}`;
+  byId("lesson-title").textContent = step.title || "Analise esta situação";
+  byId("lesson-body").textContent = localizeDecimals(step.body || "Considere a ação atual e o preço para definir seu plano.");
+  renderLessonProgress();
   byId("lesson-previous").disabled = lessonIndex === 0;
   byId("lesson-next").disabled = lessonIndex >= lessonSteps.length - 1;
+}
+
+function renderLessonProgress() {
+  const progress = byId("lesson-progress");
+  progress.style.setProperty("--step-count", Math.max(lessonSteps.length, 1));
+  progress.replaceChildren(...lessonSteps.map((step, index) => {
+    const item = document.createElement("li");
+    item.dataset.state = index < lessonIndex ? "complete" : index === lessonIndex ? "current" : "upcoming";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.setAttribute("aria-label", `Etapa ${index + 1} de ${lessonSteps.length}: ${step.label || step.title || "Análise"}`);
+    if (index === lessonIndex) button.setAttribute("aria-current", "step");
+    const marker = document.createElement("span");
+    marker.className = "lesson-step-marker";
+    marker.textContent = String(index + 1);
+    const label = document.createElement("span");
+    label.className = "lesson-step-label";
+    label.textContent = shortStepLabel(step);
+    button.append(marker, label);
+    button.addEventListener("click", () => {
+      lessonIndex = index;
+      renderLessonStep();
+    });
+    item.append(button);
+    return item;
+  }));
+}
+
+function shortStepLabel(step) {
+  return ({
+    context: "Situação",
+    concept: "Conceito",
+    estimate: "Números",
+    suggestion: "Sugestão",
+    practice: "Prática",
+  })[step.kind] || step.label || "Etapa";
 }
 
 function moveLessonStep(offset) {
@@ -117,12 +196,12 @@ export function renderBetPurpose(result) {
   purpose.hidden = false;
   purpose.dataset.purpose = result.purpose || "pointless";
   byId("bet-purpose-label").textContent = {
-    value: "Value",
+    value: "Aposta por valor",
     bluff: "Bluff",
-    pointless: "Purpose unclear in this model",
-    unmodeled: "Not modeled",
-  }[result.purpose] || "Bet purpose";
-  byId("bet-purpose-evidence").textContent = result.evidence || "No range evidence is available.";
+    pointless: "Propósito pouco claro neste modelo",
+    unmodeled: "Não modelado",
+  }[result.purpose] || "Propósito da aposta";
+  byId("bet-purpose-evidence").textContent = result.evidence || "Não há dados da faixa para avaliar.";
 }
 
 export function renderGameCoach(snapshot, note, handComplete = false, context = null, feedback = null) {
@@ -132,7 +211,7 @@ export function renderGameCoach(snapshot, note, handComplete = false, context = 
   if (snapshot) {
     if (context === "last_decision") lessonSignature = "";
     renderCoachSnapshot(snapshot);
-    if (context === "last_decision") byId("coach-state").textContent = "Last decision · lesson from before the action";
+    if (context === "last_decision") byId("coach-state").textContent = "Decisão anterior · análise feita antes da ação";
     return;
   }
   lessonSteps = [];
@@ -146,24 +225,24 @@ export function renderGameCoach(snapshot, note, handComplete = false, context = 
   byId("coach-limitations").hidden = true;
   byId("coach-limitations-title").hidden = true;
   if (note) {
-    byId("coach-state").textContent = handComplete ? "Hand complete" : "Multiway decision";
-    byId("coach-empty").querySelector("h3").textContent = handComplete ? "Review the completed hand" : "Heads-up estimate unavailable";
+    byId("coach-state").textContent = handComplete ? "Mão concluída" : "Decisão multiway";
+    byId("coach-empty").querySelector("h3").textContent = handComplete ? "Revise a mão concluída" : "Estimativa mano a mano indisponível";
     byId("coach-empty").querySelector("p").textContent = note;
   } else if (handComplete) {
-    byId("coach-state").textContent = "Hand complete";
-    byId("coach-empty").querySelector("h3").textContent = "Review your last decision";
-    byId("coach-empty").querySelector("p").textContent = "The coach analyzes decisions while you have an action to make. Recorded actions and notes are in Session review.";
+    byId("coach-state").textContent = "Mão concluída";
+    byId("coach-empty").querySelector("h3").textContent = "Revise sua última decisão";
+    byId("coach-empty").querySelector("p").textContent = "O coach analisa as decisões quando é sua vez de agir. As ações e anotações ficam na revisão da sessão.";
   } else {
-    byId("coach-state").textContent = handComplete ? "Hand complete" : "Ready when you play";
-    byId("coach-empty").querySelector("h3").textContent = "A guide for each decision";
-    byId("coach-empty").querySelector("p").textContent = "When it is your turn, the coach walks through the spot, the poker idea, the numbers, and one question to carry forward.";
+    byId("coach-state").textContent = handComplete ? "Mão concluída" : "Pronto para quando você jogar";
+    byId("coach-empty").querySelector("h3").textContent = "Um guia para cada decisão";
+    byId("coach-empty").querySelector("p").textContent = "Na sua vez, o coach explica a situação, o conceito de poker, os números e uma pergunta para levar adiante.";
   }
 }
 
 export function setCoachMode(enabled) {
   const toggle = byId("coach-mode-toggle");
   toggle.setAttribute("aria-pressed", String(enabled));
-  toggle.textContent = enabled ? "Coach on" : "Coach off";
+  toggle.textContent = enabled ? "Coach ligado" : "Coach desligado";
   byId("coach-panel").hidden = !enabled;
   document.querySelector(".practice-grid").classList.toggle("coach-hidden", !enabled);
 }
@@ -171,7 +250,7 @@ export function setCoachMode(enabled) {
 export async function refreshSessionReview() {
   const status = byId("review-status");
   const list = byId("hand-review-list");
-  status.textContent = "Loading hand review…";
+  status.textContent = "Carregando revisão das mãos…";
   list.replaceChildren();
 
   try {
@@ -179,13 +258,13 @@ export async function refreshSessionReview() {
       fetch("/api/session/hands", { headers: { Accept: "application/json" } }),
       fetch("/api/session/leaks", { headers: { Accept: "application/json" } }),
     ]);
-    if (!handsResponse.ok || !leaksResponse.ok) throw new Error("Review data is unavailable.");
+    if (!handsResponse.ok || !leaksResponse.ok) throw new Error("Os dados da revisão estão indisponíveis.");
     const { hands } = await handsResponse.json();
     const report = await leaksResponse.json();
     renderHandReviews(Array.isArray(hands) ? hands : []);
     renderLeakReport(report);
   } catch {
-    status.textContent = "Session review is unavailable while the local server is disconnected.";
+    status.textContent = "A revisão da sessão está indisponível enquanto o servidor local estiver desconectado.";
   }
 }
 
@@ -195,7 +274,7 @@ function renderHandReviews(hands) {
   list.replaceChildren();
   if (hands.length === 0) {
     status.hidden = false;
-    status.textContent = "Completed hands will appear here with cards, actions, and decision notes.";
+    status.textContent = "As mãos concluídas aparecerão aqui com cartas, ações e anotações sobre as decisões.";
     return;
   }
   status.hidden = true;
@@ -207,18 +286,18 @@ function createHandReview(hand) {
   const details = document.createElement("details");
   const summary = document.createElement("summary");
   const date = new Date(hand.recorded_at);
-  summary.textContent = `${Number.isNaN(date.getTime()) ? "Hand" : date.toLocaleString()} · ${variantLabel(hand.variant)} · ${hand.hero_position || "Position unknown"} · Pot ${hand.final_pot ?? 0}${hand.tricky ? " · Review marked" : ""}`;
+  summary.textContent = `${Number.isNaN(date.getTime()) ? "Mão" : date.toLocaleString("pt-BR")} · ${variantLabel(hand.variant)} · ${hand.hero_position || "Posição desconhecida"} · Pote ${hand.final_pot ?? 0}${hand.tricky ? " · Marcada para revisão" : ""}`;
   details.append(summary);
 
   const facts = document.createElement("dl");
-  addFact(facts, "Variant", variantLabel(hand.variant));
-  if (hand.variant === "pot_limit_omaha") addFact(facts, "Showdown rule", "Exactly 2 hole cards + 3 board cards");
-  addFact(facts, "Hero cards", formatCards(hand.hole_cards));
+  addFact(facts, "Modalidade", variantLabel(hand.variant));
+  if (hand.variant === "pot_limit_omaha") addFact(facts, "Regra do showdown", "Use exatamente 2 cartas da mão + 3 do board");
+  addFact(facts, "Suas cartas", formatCards(hand.hole_cards));
   addFact(facts, "Board", formatCards(hand.board));
-  addFact(facts, "Starting stack", hand.starting_stack ?? "—");
-  addFact(facts, "Payout", hand.payouts?.[hand.hero_id] ?? 0);
-  addFact(facts, "Winners", Array.isArray(hand.winners) ? hand.winners.join(", ") || "—" : "—");
-  addFact(facts, "Showdown ranks", Object.entries(hand.showdown_ranks || {}).map(([id, rank]) => `${id}: ${rank}`).join(" · ") || "—");
+  addFact(facts, "Stack inicial", hand.starting_stack ?? "—");
+  addFact(facts, "Pagamento", hand.payouts?.[hand.hero_id] ?? 0);
+  addFact(facts, "Vencedores", Array.isArray(hand.winners) ? hand.winners.join(", ") || "—" : "—");
+  addFact(facts, "Mãos no showdown", Object.entries(hand.showdown_ranks || {}).map(([id, rank]) => `${id}: ${rank}`).join(" · ") || "—");
   details.append(facts);
 
   const playerNames = Object.fromEntries((hand.players || []).map((player) => [player.id, player.name || player.id]));
@@ -229,8 +308,8 @@ function createHandReview(hand) {
       const row = document.createElement("li");
       const cards = Array.isArray(player.hole_cards) && player.hole_cards.length
         ? formatCards(player.hole_cards)
-        : player.active_at_end ? "not recorded" : "hidden after fold";
-      row.textContent = `${player.name || player.id} · ${player.position || "—"} · cards ${cards} · contributed ${player.total_contributed ?? hand.contributions?.[player.id] ?? 0} · stack ${player.final_stack ?? "—"}`;
+        : player.active_at_end ? "não registrado" : "ocultas após fold";
+      row.textContent = `${player.name || player.id} · ${player.position || "—"} · cartas ${cards} · contribuiu ${player.total_contributed ?? hand.contributions?.[player.id] ?? 0} · stack ${player.final_stack ?? "—"}`;
       players.append(row);
     });
     details.append(players);
@@ -239,14 +318,14 @@ function createHandReview(hand) {
   if (winningHands.length) {
     const winners = document.createElement("p");
     winners.className = "review-evidence";
-    winners.textContent = `Winning combinations · ${winningHands.map(([id, cards]) => `${playerNames[id] || id}: ${formatCards(cards)}`).join("; ")}`;
+    winners.textContent = `Combinações vencedoras · ${winningHands.map(([id, cards]) => `${playerNames[id] || id}: ${formatCards(cards)}`).join("; ")}`;
     details.append(winners);
   }
   const awards = Array.isArray(hand.pot_awards) ? hand.pot_awards : [];
   if (awards.length) {
     const awardSummary = document.createElement("p");
     awardSummary.className = "review-evidence";
-    awardSummary.textContent = `Pot awards · ${awards.map((award) => `${award.label}: ${award.amount} to ${(award.winner_ids || []).map((id) => playerNames[id] || id).join(", ") || "refunded"}`).join("; ")}`;
+    awardSummary.textContent = `Distribuição do pote · ${awards.map((award) => `${localizePotLabel(award.label)}: ${award.amount} para ${(award.winner_ids || []).map((id) => playerNames[id] || id).join(", ") || "devolvido"}`).join("; ")}`;
     details.append(awardSummary);
   }
 
@@ -254,7 +333,7 @@ function createHandReview(hand) {
   actions.className = "review-actions";
   (hand.actions || []).forEach((action) => {
     const row = document.createElement("li");
-    row.textContent = `${variantLabel(action.variant || hand.variant)} · ${action.street || "Street"}: ${playerNames[action.player_id] || action.player_id || "Player"} ${action.action || "acted"} · ${action.chips ?? 0} chips · bet to ${action.bet_to ?? "—"}`;
+    row.textContent = `${variantLabel(action.variant || hand.variant)} · ${localizeStreet(action.street)}: ${playerNames[action.player_id] || action.player_id || "Jogador"} ${action.action || "agiu"} · ${action.chips ?? 0} fichas · total apostado ${action.bet_to ?? "—"}`;
     actions.append(row);
   });
   if (actions.childElementCount) details.append(actions);
@@ -265,13 +344,13 @@ function createHandReview(hand) {
     const row = document.createElement("li");
     const pieces = [
       `${decision.street}: ${decision.action}`,
-      decision.pot_odds_percentage == null ? "" : `price ${formatPercent(decision.pot_odds_percentage)}`,
+      decision.pot_odds_percentage == null ? "" : `preço ${formatPercent(decision.pot_odds_percentage)}`,
       decision.equity_percentage == null ? "" : `equity ${formatPercent(decision.equity_percentage)}`,
-      decision.bet_purpose ? `purpose: ${decision.bet_purpose}` : "",
+      decision.bet_purpose ? `propósito: ${localizeBetPurpose(decision.bet_purpose)}` : "",
       decision.range_description || decision.equity_source
-        ? `range: ${decision.range_description || decision.equity_source}${decision.opponent_range_size == null ? "" : ` (${decision.opponent_range_size} combos)`}` : "",
-      decision.deterministic ? "exact known-hand river" : decision.equity_iterations == null ? "" : `${decision.equity_iterations} trials${decision.estimation_seed == null ? "" : ` · seed ${decision.estimation_seed}`}`,
-      decision.draw_analysis ? `nut outs ${formatCards(decision.draw_analysis.nut_outs)} · non-nut outs ${formatCards(decision.draw_analysis.non_nut_outs)}` : "",
+        ? `faixa: ${localizeEquitySource(decision.range_description || decision.equity_source)}${decision.opponent_range_size == null ? "" : ` (${decision.opponent_range_size} combinações)`}` : "",
+      decision.deterministic ? "river com mão conhecida e cálculo exato" : decision.equity_iterations == null ? "" : `${decision.equity_iterations} simulações${decision.estimation_seed == null ? "" : ` · semente ${decision.estimation_seed}`}`,
+      decision.draw_analysis ? `outs para nuts ${formatCards(decision.draw_analysis.nut_outs)} · outs que não formam nuts ${formatCards(decision.draw_analysis.non_nut_outs)}` : "",
       ...(Array.isArray(decision.limitations) ? decision.limitations : []),
       decision.process_feedback || "",
       decision.review_question || "",
@@ -287,7 +366,7 @@ function createHandReview(hand) {
 }
 
 function renderLeakReport(report) {
-  byId("leak-study-target").textContent = report?.study_target || "No study target available yet.";
+  byId("leak-study-target").textContent = report?.study_target || "Ainda não há uma meta de estudo.";
   const flags = byId("leak-flag-list");
   flags.replaceChildren();
   const groups = report?.by_variant;
@@ -295,7 +374,7 @@ function renderLeakReport(report) {
     Object.entries(groups).forEach(([variant, group]) => {
       const item = document.createElement("li");
       const title = document.createElement("strong");
-      title.textContent = `${variantLabel(variant)} · ${group.hands_reviewed ?? 0} hands`;
+      title.textContent = `${variantLabel(variant)} · ${group.hands_reviewed ?? 0} mãos`;
       item.append(title);
       const nested = document.createElement("ul");
       nested.className = "variant-leak-flags";
@@ -336,13 +415,13 @@ function createDecisionTeaching(steps) {
   const details = document.createElement("details");
   details.className = "decision-lesson-review";
   const summary = document.createElement("summary");
-  summary.textContent = "Open the step-by-step coaching";
+  summary.textContent = "Abrir a análise passo a passo do coach";
   details.append(summary);
   const list = document.createElement("ol");
   steps.forEach((step) => {
     const entry = document.createElement("li");
     const heading = document.createElement("strong");
-    heading.textContent = step.title || step.label || "Coach step";
+    heading.textContent = step.title || step.label || "Etapa do coach";
     const body = document.createElement("span");
     body.textContent = step.body || "";
     entry.append(heading, body);
@@ -366,18 +445,41 @@ function formatCards(cards) {
   return Array.isArray(cards) && cards.length ? cards.join("  ") : "—";
 }
 
+function localizeStreet(street) {
+  return ({ preflop: "pré-flop", flop: "flop", turn: "turn", river: "river", showdown: "showdown" })[street] || street || "etapa";
+}
+
+function localizePotLabel(label) {
+  if (label === "Main Pot") return "Pote principal";
+  if (label === "Uncalled return") return "Devolução de aposta não paga";
+  const sidePot = /^Side Pot (\d+)$/.exec(label || "");
+  return sidePot ? `Pote paralelo ${sidePot[1]}` : label || "Pote";
+}
+
+function localizeEquitySource(source) {
+  return equitySourceCopy[source] || source || "faixa adversária modelada";
+}
+
+function localizeBetPurpose(purpose) {
+  return ({ value: "aposta por valor", bluff: "blefe", pointless: "aposta sem propósito claro", unmodeled: "não modelado" })[purpose] || purpose;
+}
+
+function localizeDecimals(text) {
+  return String(text).replace(/(\d)\.(\d)/g, "$1,$2");
+}
+
 function variantLabel(variant) {
   return variant === "pot_limit_omaha" ? "PLO4 · Pot-limit" : "Texas Hold’em";
 }
 
 function formatPercent(value) {
-  return value == null || !Number.isFinite(Number(value)) ? "—" : `${Number(value).toFixed(1)}%`;
+  return value == null || !Number.isFinite(Number(value)) ? "—" : `${Number(value).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 }
 
 function formatChips(value) {
   if (value == null || !Number.isFinite(Number(value))) return "—";
   const amount = Number(value);
-  return `${amount > 0 ? "+" : ""}${amount.toFixed(1)} chips`;
+  return `${amount > 0 ? "+" : ""}${amount.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} fichas`;
 }
 
 export function initializeCoachHud() {

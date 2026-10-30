@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from threading import RLock
 
 from backend.brain.ai_agent import OpponentAI, OpponentProfile
 from backend.brain.coach import CoachService, CoachSnapshot, DecisionNote, SessionTracker
 from backend.engine.game_state import ActionType, GameState, Street
+from backend.engine.evaluator import HandEvaluator
 from backend.engine.player import Player
 from backend.engine.rules import BettingStructure, GameRules, GameVariant
 
@@ -47,7 +49,7 @@ class TrainingTable:
     def start_hand(self, variant: GameVariant | str | None = None) -> dict[str, object]:
         with self._lock:
             if self._state is not None and not self._state.hand_complete:
-                raise ValueError("Finish the current hand before dealing another.")
+                raise ValueError("Conclua a mão atual antes de distribuir outra.")
             selected_variant = self._variant if variant is None else _resolve_variant(variant)
             rules = _rules_for(selected_variant)
             # A practice table supports a fresh buy-in after a player loses the stack.
@@ -56,9 +58,9 @@ class TrainingTable:
             for index in range(1, len(self._stacks)):
                 if self._stacks[index] <= 0:
                     self._stacks[index] = self.starting_stack
-            players = (Player(self.hero_id, "You", self._stacks[0]),) + tuple(
+            players = (Player(self.hero_id, "Você", self._stacks[0]),) + tuple(
                 Player(f"bot-{index}", name, self._stacks[index])
-                for index, name in enumerate(("Aggro Alex", "Nitty Norman", "Calling Kevin", "Balanced Blair", "Aggro Alex"), start=1)
+                for index, name in enumerate(("Alex agressivo", "Norman conservador", "Kevin pagador", "Blair equilibrado", "Alex agressivo"), start=1)
             )
             self._state = GameState.new_hand(
                 players,
@@ -90,19 +92,19 @@ class TrainingTable:
         with self._lock:
             state = self._require_state()
             if variant is not None and _resolve_variant(variant) is not state.rules.variant:
-                raise ValueError("Action variant does not match the active hand; variant cannot change mid-hand.")
+                raise ValueError("A modalidade da ação não corresponde à mão atual e não pode ser alterada durante uma mão.")
             if state.current_player_id != self.hero_id:
-                raise ValueError("It is not your turn yet.")
+                raise ValueError("Ainda não é sua vez de agir.")
             if not isinstance(action_value, str):
-                raise ValueError("Action must be a string.")
+                raise ValueError("A ação deve ser um texto válido.")
             try:
                 action = ActionType(action_value)
             except ValueError as exc:
-                raise ValueError(f"Unknown action '{action_value}'.") from exc
+                raise ValueError(f"Ação desconhecida: '{action_value}'.") from exc
             if amount_value is not None and action not in (ActionType.BET, ActionType.RAISE):
-                raise ValueError("amount is only accepted for bet or raise actions.")
+                raise ValueError("O valor só pode ser informado nas ações bet ou raise.")
             if amount_value is not None and (not isinstance(amount_value, int) or isinstance(amount_value, bool)):
-                raise ValueError("Bet and raise amounts must be integer chip totals.")
+                raise ValueError("Os valores de bet e raise devem ser totais inteiros de fichas.")
             hero = state.player_by_id(self.hero_id)
             assert hero is not None
             pot_before = state.pot
@@ -146,8 +148,8 @@ class TrainingTable:
                     action=action.value,
                     chips=call_amount if action is ActionType.CALL else max(0, int(amount_value or 0) - hero.current_bet),
                     pot_before=pot_before,
-                    rationale=coach_error or "No opponent model was available when this decision was made.",
-                    review_question="What range and future-street plan support this decision?",
+                    rationale=coach_error or "Nenhum modelo de adversário estava disponível quando esta decisão foi tomada.",
+                    review_question="Que faixa e plano para as próximas streets justificam esta decisão?",
                     variant=state.rules.variant.value,
                     process_feedback=process_feedback,
                 ))
@@ -174,7 +176,7 @@ class TrainingTable:
                     rationale=coach.advice,
                     review_question=(
                         coach.learning_steps[-1]["body"] if coach.learning_steps else
-                        "What range assumption and future-street plan mattered most?"
+                        "Qual suposição sobre a faixa e qual plano para as próximas streets mais importaram?"
                     ),
                     variant=state.rules.variant.value,
                     equity_source=coach.equity_source,
@@ -241,8 +243,8 @@ class TrainingTable:
                     coach_context = "last_decision"
                 else:
                     coach_note = (
-                        "No heads-up estimate was recorded for this hand. Multiway equity is not modeled yet; "
-                        "open Session review to inspect the actions."
+                        "Não foi registrada uma estimativa mano a mano nesta mão. A equity multiway ainda não é modelada; "
+                        "consulte a revisão da sessão para ver as ações."
                     )
             elif state.current_player_id == self.hero_id:
                 if active_opponents:
@@ -254,7 +256,7 @@ class TrainingTable:
                     except ValueError as exc:
                         coach_note = str(exc)
                 else:
-                    coach_note = "No active opponent is available for an equity estimate."
+                    coach_note = "Não há adversário ativo para estimar a equity."
             bet_bounds = state.betting_bounds(hero.id)
             min_raise = bet_bounds["minimum_raise_to"] or (state.current_bet + state.last_full_raise_size)
             max_raise = bet_bounds["maximum_raise_to"] or (hero.current_bet + hero.stack)
@@ -262,7 +264,7 @@ class TrainingTable:
             if hero.is_active and not state.hand_complete and len(active_opponents) == 1 and state.pot > 0:
                 spr_value = min(hero.stack, active_opponents[0].stack) / state.pot
             last_action = state.action_history[-1] if state.action_history else None
-            variant_label = "Pot-Limit Omaha" if state.rules.variant is GameVariant.POT_LIMIT_OMAHA else "Texas Hold’em"
+            variant_label = "Omaha Pot-Limit" if state.rules.variant is GameVariant.POT_LIMIT_OMAHA else "Texas Hold’em"
             return {
                 "started": True,
                 "hand_number": self._hand_number,
@@ -310,6 +312,10 @@ class TrainingTable:
                 "winners": list(state.winners),
                 "payouts": dict(state.payouts),
                 "showdown_ranks": dict(state.showdown_ranks),
+                "showdown_descriptions": {
+                    player_id: HandEvaluator.describe(cards)
+                    for player_id, cards in state.winning_hands
+                },
                 "winning_hands": {
                     player_id: [card.code for card in cards]
                     for player_id, cards in state.winning_hands
@@ -344,14 +350,35 @@ class TrainingTable:
         while state.current_player_id and state.current_player_id != self.hero_id and not state.hand_complete:
             guard += 1
             if guard > 32:
-                raise RuntimeError("Opponent action limit exceeded; the hand was stopped safely.")
+                raise RuntimeError("O limite de ações dos adversários foi atingido; a mão foi interrompida com segurança.")
             bot_id = state.current_player_id
             ai = self._bots.get(bot_id)
             if ai is None:
-                raise RuntimeError("The current table seat has no opponent profile.")
+                raise RuntimeError("O jogador neste assento não tem um perfil de adversário.")
             hero = state.player_by_id(self.hero_id)
-            decision = ai.decide(state, bot_id, opponent_id=self.hero_id if hero and hero.is_active else None)
-            state = state.apply_action(bot_id, decision.action, decision.amount)
+            decision = ai.decide(
+                state,
+                bot_id,
+                opponent_id=self.hero_id if hero and hero.is_active else None,
+                allow_fold=False,
+            )
+            if decision.action is ActionType.FOLD:
+                legal = state.legal_actions()
+                fallback = ActionType.CALL if ActionType.CALL in legal else ActionType.CHECK
+                decision = replace(
+                    decision,
+                    action=fallback,
+                    amount=None,
+                    reason=f"{decision.reason} A mesa converte fold automático em {fallback.value}.",
+                )
+            legal_for_bot = state.legal_actions(allow_fold=False)
+            if decision.action not in legal_for_bot:
+                decision = replace(
+                    decision,
+                    action=ActionType.CALL if ActionType.CALL in legal_for_bot else ActionType.CHECK,
+                    amount=None,
+                )
+            state = state.apply_action(bot_id, decision.action, decision.amount, allow_fold=False)
         self._state = state
 
     def _resolve_showdown(self) -> None:
@@ -369,7 +396,7 @@ class TrainingTable:
 
     def _require_state(self) -> GameState:
         if self._state is None:
-            raise ValueError("Start a hand before taking an action.")
+            raise ValueError("Distribua uma mão antes de escolher uma ação.")
         return self._state
 
     def _coach_for(self, state: GameState, opponent: Player | None) -> CoachSnapshot:
@@ -403,18 +430,18 @@ class TrainingTable:
             return None
         hero_payout = dict(state.payouts).get(self.hero_id, 0)
         if self.hero_id in state.winners:
-            return f"You won ${hero_payout:.2f}" if len(state.winners) == 1 else f"Split pot · ${hero_payout:.2f} to you"
-        return "Hand complete · the pot went to your opponent"
+            return f"Você ganhou ${hero_payout:.2f}" if len(state.winners) == 1 else f"Pote dividido · ${hero_payout:.2f} para você"
+        return "Mão concluída · o adversário levou o pote"
 
 
 def _resolve_variant(value: GameVariant | str) -> GameVariant:
     if not isinstance(value, (str, GameVariant)):
-        raise ValueError("variant must be 'texas_holdem' or 'pot_limit_omaha'.")
+        raise ValueError("A modalidade deve ser 'texas_holdem' ou 'pot_limit_omaha'.")
     try:
         return GameVariant(value)
     except ValueError as exc:
         raise ValueError(
-            f"Unsupported variant '{value}'. Supported variants: texas_holdem, pot_limit_omaha."
+            f"Modalidade não compatível: '{value}'. Modalidades disponíveis: Texas Hold’em e Omaha Pot-Limit."
         ) from exc
 
 
@@ -433,40 +460,40 @@ def _process_feedback(
 ) -> str:
     if coach is None:
         return (
-            "Your action followed the table rules. In review, note the range, price, and future-street plan you used; "
-            "the hand result alone cannot grade that reasoning."
+            "Sua ação seguiu as regras da mesa. Na revisão, anote a faixa, o preço e o plano para as próximas streets; "
+            "o resultado da mão, por si só, não avalia esse raciocínio."
         )
     if action in (ActionType.CALL, ActionType.FOLD) and call_amount > 0 and coach.pot_odds_percentage is not None:
         gap = coach.equity_percentage - coach.pot_odds_percentage
         if gap > 0:
-            relation = f"The modeled equity was {gap:.1f} points above the immediate call price."
+            relation = f"A equity modelada ficou {gap:.1f} pontos acima do preço imediato do call."
         elif gap < 0:
-            relation = f"The modeled equity was {abs(gap):.1f} points below the immediate call price."
+            relation = f"A equity modelada ficou {abs(gap):.1f} pontos abaixo do preço imediato do call."
         else:
-            relation = "The modeled equity was at the immediate call price."
+            relation = "A equity modelada correspondeu ao preço imediato do call."
         if action is ActionType.CALL:
             return (
-                f"You called. {relation} Check whether the range assumption and later-street plan support that choice; "
-                "this is a reasoning checkpoint, not a verdict from the hand's result."
+                f"Você deu call. {relation} Confira se a suposição sobre a faixa e o plano para as próximas streets justificam a escolha; "
+                "este é um ponto de revisão do raciocínio, não um veredito baseado no resultado da mão."
             )
         return (
-            f"You folded before paying the call. {relation} If your read differed from the model, compare that read "
-            "with the range in review; the result does not grade the choice."
+            f"Você deu fold antes de pagar o call. {relation} Se sua leitura diferiu do modelo, compare-a "
+            "com a faixa na revisão; o resultado não determina se a escolha foi boa."
         )
     if action is ActionType.CHECK:
         return (
-            "You checked with no call price. In review, ask whether a weaker hand could call for value or a better hand "
-            "could fold; checking can also keep the pot manageable."
+            "Você deu check sem precisar pagar um call. Na revisão, avalie se uma mão pior poderia pagar por valor ou se uma mão melhor "
+            "poderia desistir; o check também pode manter o pote controlado."
         )
     if action in (ActionType.BET, ActionType.RAISE):
-        total = f" to {target} chips" if target is not None else ""
+        total = f" até {target} fichas" if target is not None else ""
         return (
-            f"The server accepted your legal {action.value}{total}. Equity for a call does not by itself justify a bet; "
-            "review what worse hands could continue or better hands could fold."
+            f"A mesa aceitou seu {action.value} dentro das regras{total}. A equity de um call, por si só, não justifica uma aposta; "
+            "avalie quais mãos piores poderiam continuar ou quais mãos melhores poderiam desistir."
         )
     if action is ActionType.ALL_IN:
         return (
-            "The server accepted this all-in under the hand rules. Legal does not mean automatically best: review the "
-            "price, effective stack, range, and remaining redraw risk."
+            "A mesa aceitou este all-in conforme as regras da mão. Ser permitido não significa ser a melhor decisão: revise "
+            "o preço, o stack efetivo, a faixa e o risco de redraw."
         )
-    return "You folded. In review, compare the range you assigned with the price and plan you had in mind."
+    return "Você deu fold. Na revisão, compare a faixa que atribuiu ao adversário com o preço e o plano que tinha em mente."

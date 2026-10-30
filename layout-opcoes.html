@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Opções de layout · resultado da mão</title>
+  <link rel="stylesheet" href="/css/table.css">
+  <link rel="stylesheet" href="/css/hud.css">
+  <style>
+    body { color: var(--ink); background: var(--shell); }
+    .workspace { max-width: 1440px; }
+    .options-intro { display:flex; align-items:end; justify-content:space-between; gap:24px; margin-bottom:22px; }
+    .options-intro p { max-width:62ch; margin:0; color:var(--muted); font-size:14px; line-height:1.55; }
+    .options-list { display:grid; gap:30px; }
+    .option { min-width:0; }
+    .option-heading { display:flex; align-items:baseline; gap:12px; margin-bottom:10px; }
+    .option-heading h2 { margin:0; font-size:19px; }
+    .option-heading span { color:var(--muted); font-size:12px; }
+    .mock { overflow:hidden; border:1px solid var(--line); border-radius:13px; background:var(--panel); }
+    .mock-head { min-height:59px; padding:11px 18px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #20392d; }
+    .mock-head h3 { margin:0 0 3px; font-size:17px; }
+    .mock-head small,.mock-foot small { color:var(--muted); font-size:12px; }
+    .mock-status { color:var(--muted); font-size:12px; }
+    .mock-status i { display:inline-block; width:6px; height:6px; margin-right:7px; border-radius:50%; background:var(--gold); }
+    .mock-stage { padding:20px 30px; background:#0f2119; }
+    .mock-oval { position:relative; min-height:395px; display:grid; place-items:center; padding:30px; border:1px solid #367252; border-radius:48% / 43%; background:radial-gradient(ellipse at 50% 45%,var(--felt-light),var(--felt) 75%); box-shadow:inset 0 0 0 7px #0c281c,inset 0 0 0 8px #3b7957; }
+    .mock-seats { position:absolute; inset:0; }
+    .mock-seat { position:absolute; width:145px; display:grid; justify-items:center; gap:5px; text-align:center; font-size:12px; }
+    .mock-seat strong { font-family:"Barlow Semi Condensed",sans-serif; font-size:13px; }
+    .mock-seat small { color:#d9e5dc; }
+    .mock-seat em { color:#ebd58a; font-style:normal; font-size:11px; }
+    .mock-seat.top { top:12px; left:50%; transform:translateX(-50%); }
+    .mock-seat.left { top:28%; left:7%; }
+    .mock-seat.right { top:28%; right:7%; }
+    .mock-seat.bl { bottom:10%; left:8%; }
+    .mock-seat.br { bottom:10%; right:8%; }
+    .mock-seat.hero { bottom:5px; left:50%; transform:translateX(-50%); }
+    .backs { display:flex; height:39px; padding-top:3px; }
+    .backs i { width:28px; height:36px; margin-left:-8px; border:1px solid #a8c5b1; border-radius:4px; background:repeating-linear-gradient(135deg,#285642 0 4px,#6b9c7b 4px 5px,#285642 5px 9px); }
+    .backs i:first-child { margin-left:0; }
+    .mock-center { position:relative; z-index:1; display:grid; justify-items:center; gap:10px; max-width:100%; }
+    .pot-strip { gap:12px; }
+    .board { display:flex; justify-content:center; gap:6px; }
+    .board .playing-card { width:42px; height:59px; }
+    .mock-winner { color:#f3f5ef; font-size:13px; }
+    .mock-winner b { color:#f3f5ef; }
+    .result-box { max-width:49ch; color:#f0db8d; font-size:12px; line-height:1.5; text-align:center; }
+    .result-box strong { display:block; margin-bottom:3px; font-size:15px; }
+    .mock-foot { min-height:58px; padding:10px 18px; display:flex; align-items:center; justify-content:space-between; }
+    .mock-foot div { display:grid; gap:3px; }
+    .mock-foot b { font-size:14px; }
+    .mock-button { min-height:38px; padding:0 16px; display:grid; place-items:center; border:1px solid #f0d78e; border-radius:7px; background:var(--gold); color:#172219; font-family:"Barlow Semi Condensed",sans-serif; font-weight:700; }
+    /* Option A: explanation lives in a stable band below the felt. */
+    .result-band { padding:13px 18px 15px; display:grid; grid-template-columns:auto minmax(0,1fr); align-items:center; gap:8px 18px; border-top:1px solid #32483d; background:#12271e; }
+    .result-band strong { color:#f0db8d; font-family:"Barlow Semi Condensed",sans-serif; font-size:16px; white-space:nowrap; }
+    .result-band p { margin:0; color:#d7e2d8; font-size:12px; line-height:1.5; }
+    .result-band .band-note { grid-column:2; color:var(--muted); font-size:11px; }
+    /* Option B: compact winner callout anchored in the table header. */
+    .winner-header { display:flex; align-items:center; gap:10px; }
+    .winner-header strong { color:#f0db8d; font-family:"Barlow Semi Condensed",sans-serif; font-size:15px; }
+    .winner-header span { color:#d7e2d8; font-size:12px; }
+    .winner-header .winner-mark { width:26px; height:26px; display:grid; place-items:center; border:1px solid #806f40; border-radius:50%; color:var(--gold); font-size:13px; }
+    .option-b .result-box { display:none; }
+    /* Option C: keep felt clear; detailed result joins the Coach column. */
+    .option-c .mock-stage { padding-block:20px; }
+    .option-c .coach-result { margin-top:14px; padding-top:12px; border-top:1px solid var(--line); }
+    .option-c .coach-result h4 { margin:0 0 5px; color:#f0db8d; font-family:"Barlow Semi Condensed",sans-serif; font-size:15px; }
+    .option-c .coach-result p { margin:0; color:#d7e2d8; font-size:12px; line-height:1.5; }
+    .option-c .mock { display:grid; grid-template-columns:minmax(0,1fr) 290px; }
+    .option-c .mock-head { grid-column:1/-1; }
+    .option-c .mock-stage { grid-column:1; }
+    .coach-side { padding:20px 17px; border-left:1px solid var(--line); background:#12271e; }
+    .coach-side h3 { margin:0 0 4px; font-size:18px; }
+    .coach-side > small { color:var(--muted); font-size:11px; }
+    .coach-score { margin-top:20px; padding:11px 0; border-block:1px solid var(--line); color:#d7e2d8; font-size:12px; line-height:1.5; }
+    .coach-result strong { display:block; margin-bottom:4px; color:#f0db8d; font-family:"Barlow Semi Condensed",sans-serif; font-size:15px; }
+    .coach-result p { margin:0; color:#d7e2d8; font-size:12px; line-height:1.5; }
+    .coach-result small { display:block; margin-top:8px; color:var(--muted); font-size:11px; line-height:1.5; }
+    .option-c .mock-foot { grid-column:1/-1; border-top:1px solid var(--line); }
+    @media(max-width:850px) {
+      .workspace { padding:26px 16px; }
+      .options-intro { align-items:start; flex-direction:column; gap:9px; }
+      .mock-stage { padding:14px 8px; }
+      .mock-oval { min-height:360px; padding:10px; }
+      .mock-seat { width:112px; font-size:11px; }
+      .mock-seat.left { left:0; }.mock-seat.right { right:0; }
+      .mock-seat.bl { left:0; }.mock-seat.br { right:0; }
+      .option-b .mock-head { align-items:flex-start; flex-direction:column; gap:8px; }
+      .winner-header { align-items:flex-start; flex-direction:column; gap:4px; }
+      .result-band { grid-template-columns:1fr; gap:5px; }
+      .result-band .band-note { grid-column:1; }
+      .option-c .mock { grid-template-columns:1fr; }
+      .option-c .mock-head,.option-c .mock-stage,.option-c .mock-foot { grid-column:1; }
+      .coach-side { border-left:0; border-top:1px solid var(--line); }
+      .mock-center { gap:8px; }
+      .pot-strip { gap:6px; padding-inline:8px; }
+      .pot-readout { gap:4px; font-size:10px; }
+      .pot-readout strong { font-size:14px; }
+      .table-divider { height:12px; }
+      .board .playing-card { width:35px; height:50px; }
+      .board { gap:3px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="workspace">
+    <header class="options-intro">
+      <div><h1>Onde fica melhor o resultado?</h1><p>Três posições para a explicação da mão encerrada. O centro da mesa fica livre para as cartas; escolha se prefere leitura completa, um resumo imediato ou uma integração com o Coach.</p></div>
+    </header>
+    <div class="options-list">
+      <section class="option option-a" aria-labelledby="option-a-title">
+        <div class="option-heading"><h2 id="option-a-title">A · Faixa abaixo da mesa</h2><span>Mais visível · explicação sempre completa</span></div>
+        <div class="mock">
+          <div class="mock-head"><div><h3>Próxima mão · Texas Hold’em</h3><small>6-max · No-Limit · $1/$2</small></div><span class="mock-status"><i></i>Mão concluída</span></div>
+          <div class="mock-stage"><div class="mock-oval"><div class="mock-seats">
+            <div class="mock-seat top"><strong>Alex agressivo　BTN　●</strong><small>$181,00</small><em>Desistiu</em><span class="backs"><i></i><i></i></span></div>
+            <div class="mock-seat left"><strong>Norman conservador　SB</strong><small>$207,00</small><em>Desistiu</em><span class="backs"><i></i><i></i></span></div>
+            <div class="mock-seat right"><strong>Kevin pagador　BB</strong><small>$176,00</small><span class="backs"></span></div>
+            <div class="mock-seat bl"><strong>Blair equilibrado　UTG</strong><small>$212,00</small><em>Desistiu</em><span class="backs"><i></i><i></i></span></div>
+            <div class="mock-seat br"><strong>Alex agressivo　HJ</strong><small>$219,00</small><em>Desistiu</em><span class="backs"><i></i><i></i></span></div>
+            <div class="mock-seat hero"><strong>Você　CO</strong><small>$205,00</small><span class="backs"></span></div>
+          </div><div class="mock-center"><div class="pot-strip"><div class="pot-readout"><span>Pote</span><strong>$11,00</strong></div><span class="table-divider"></span><div class="pot-readout"><span>Blinds</span><strong>$1/$2</strong></div><span class="table-divider"></span><div class="pot-readout"><span>SPR</span><strong>—</strong></div><span class="table-divider"></span><div class="pot-readout"><span>Etapa</span><strong>Showdown</strong></div></div><div class="board"><svg class="playing-card" viewBox="0 0 64 88"><rect x="1" y="1" width="62" height="86" rx="6" fill="#f3f2e8"/><text x="7" y="21" fill="#202a23" font-size="17">2</text><text x="32" y="61" fill="#202a23" font-size="32" text-anchor="middle">♠</text></svg><svg class="playing-card" viewBox="0 0 64 88"><rect x="1" y="1" width="62" height="86" rx="6" fill="#f3f2e8"/><text x="7" y="21" fill="#287da8" font-size="17">2</text><text x="32" y="61" fill="#287da8" font-size="32" text-anchor="middle">♦</text></svg><svg class="playing-card" viewBox="0 0 64 88"><rect x="1" y="1" width="62" height="86" rx="6" fill="#f3f2e8"/><text x="7" y="21" fill="#c34352" font-size="17">7</text><text x="32" y="61" fill="#c34352" font-size="32" text-anchor="middle">♥</text></svg><svg class="playing-card" viewBox="0 0 64 88"><rect x="1" y="1" width="62" height="86" rx="6" fill="#f3f2e8"/><text x="7" y="21" fill="#c34352" font-size="17">3</text><text x="32" y="61" fill="#c34352" font-size="32" text-anchor="middle">♥</text></svg><svg class="playing-card" viewBox="0 0 64 88"><rect x="1" y="1" width="62" height="86" rx="6" fill="#f3f2e8"/><text x="7" y="21" fill="#202a23" font-size="17">5</text><text x="32" y="61" fill="#202a23" font-size="32" text-anchor="middle">♠</text></svg></div><div class="mock-winner">Você ganhou <b>$11,00</b></div></div></div></div>
+          <div class="result-band"><strong>Resultado da mão</strong><p>Pote principal: Você · Par de Twos (King, Queen, and Seven Kickers) · Pote paralelo 1: Você · Pair of Twos (King, Queen, and Seven Kickers)</p><small class="band-note">A explicação aparece fora do feltro; as cinco cartas ficam desimpedidas.</small></div>
+          <div class="mock-foot"><div><small>Seu stack</small><b>$205,00</b></div><span class="mock-button">Próxima mão</span></div>
+        </div>
+      </section>
+      <section class="option option-b" aria-labelledby="option-b-title">
+        <div class="option-heading"><h2 id="option-b-title">B · Resumo no cabeçalho</h2><span>Mais compacto · detalhes vão para o Coach</span></div>
+        <div class="mock">
+          <div class="mock-head"><div><h3>Próxima mão · Texas Hold’em</h3><small>6-max · No-Limit · $1/$2</small></div><div class="winner-header"><span class="winner-mark">♛</span><div><strong>Você ganhou $11,00</strong><br><span>Par de Twos · Showdown</span></div></div></div>
+          <div class="mock-stage"><div class="mock-oval"><div class="mock-seats">
+            <div class="mock-seat top"><strong>Alex agressivo　BTN　●</strong><small>$181,00</small><em>Desistiu</em><span class="backs"><i></i><i></i></span></div><div class="mock-seat left"><strong>Norman conservador　SB</strong><small>$207,00</small><em>Desistiu</em><span class="backs"><i></i><i></i></span></div><div class="mock-seat right"><strong>Kevin pagador　BB</strong><small>$176,00</small><span class="backs"></span></div><div class="mock-seat bl"><strong>Blair equilibrado　UTG</strong><small>$212,00</small><em>Desistiu</em><span class="backs"><i></i><i></i></span></div><div class="mock-seat br"><strong>Alex agressivo　HJ</strong><small>$219,00</small><em>Desistiu</em><span class="backs"><i></i><i></i></span></div><div class="mock-seat hero"><strong>Você　CO</strong><small>$205,00</small><span class="backs"></span></div>
+          </div><div class="mock-center"><div class="pot-strip"><div class="pot-readout"><span>Pote</span><strong>$11,00</strong></div><span class="table-divider"></span><div class="pot-readout"><span>Blinds</span><strong>$1/$2</strong></div><span class="table-divider"></span><div class="pot-readout"><span>SPR</span><strong>—</strong></div><span class="table-divider"></span><div class="pot-readout"><span>Etapa</span><strong>Showdown</strong></div></div><div class="board"><div class="card-empty"></div><div class="card-empty"></div><div class="card-empty"></div><div class="card-empty"></div><div class="card-empty"></div></div><div class="mock-winner">Cartas comunitárias no centro da mesa</div></div><div class="result-box">Pote principal: Você · Par de Twos (King, Queen, and Seven Kickers)</div></div></div>
+          <div class="mock-foot"><div><small>Seu stack</small><b>$205,00</b></div><span class="mock-button">Próxima mão</span></div>
+        </div>
+      </section>
+      <section class="option option-c" aria-labelledby="option-c-title">
+        <div class="option-heading"><h2 id="option-c-title">C · Detalhe no Coach</h2><span>Mesa mais limpa · combina resultado com a análise</span></div>
+        <div class="mock">
+          <div class="mock-head"><div><h3>Próxima mão · Texas Hold’em</h3><small>6-max · No-Limit · $1/$2</small></div><span class="mock-status"><i></i>Mão concluída</span></div>
+          <div class="mock-stage"><div class="mock-oval"><div class="mock-seats">
+            <div class="mock-seat top"><strong>Alex agressivo　BTN　●</strong><small>$181,00</small><em>Desistiu</em><span class="backs"><i></i><i></i></span></div><div class="mock-seat left"><strong>Norman conservador　SB</strong><small>$207,00</small><em>Desistiu</em><span class="backs"><i></i><i></i></span></div><div class="mock-seat right"><strong>Kevin pagador　BB</strong><small>$176,00</small><span class="backs"></span></div><div class="mock-seat bl"><strong>Blair equilibrado　UTG</strong><small>$212,00</small><em>Desistiu</em><span class="backs"><i></i><i></i></span></div><div class="mock-seat br"><strong>Alex agressivo　HJ</strong><small>$219,00</small><em>Desistiu</em><span class="backs"><i></i><i></i></span></div><div class="mock-seat hero"><strong>Você　CO</strong><small>$205,00</small><span class="backs"></span></div>
+          </div><div class="mock-center"><div class="pot-strip"><div class="pot-readout"><span>Pote</span><strong>$11,00</strong></div><span class="table-divider"></span><div class="pot-readout"><span>Blinds</span><strong>$1/$2</strong></div><span class="table-divider"></span><div class="pot-readout"><span>SPR</span><strong>—</strong></div><span class="table-divider"></span><div class="pot-readout"><span>Etapa</span><strong>Showdown</strong></div></div><div class="board"><div class="card-empty"></div><div class="card-empty"></div><div class="card-empty"></div><div class="card-empty"></div><div class="card-empty"></div></div><div class="mock-winner">Você ganhou $11,00</div></div></div></div>
+          <aside class="coach-side"><h3>Coach</h3><small>Resumo da mão encerrada</small><div class="coach-score">Sua mão venceu o showdown. Compare a força da combinação com as cartas comunitárias.</div><div class="coach-result"><strong>Como o pote foi dividido</strong><p>Pote principal: Você · Par de Twos<br>Pote paralelo 1: Você · Par de Twos</p><small>Detalhe e classificação permanecem ao lado da mesa, sem cobrir as cartas.</small></div></aside>
+          <div class="mock-foot"><div><small>Seu stack</small><b>$205,00</b></div><span class="mock-button">Próxima mão</span></div>
+        </div>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

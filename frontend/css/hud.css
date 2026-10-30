@@ -6,6 +6,13 @@
 .quiet-button { min-height: 34px; padding: 0 10px; border: 1px solid #496252; border-radius: 6px; background: transparent; color: #d3e1d5; font-size: 12px; font-weight: 650; cursor: pointer; }
 .quiet-button:hover { border-color: #8eaa91; background: #1b3528; }
 .coach-heading + #coach-content { margin-top: 12px; }
+.coach-hand-result { margin: 12px 0 0; padding: 12px 0 13px; border-block: 1px solid #58643e; }
+.coach-hand-result h3 { margin: 0 0 5px; color: #e6d99a; font-size: 14px; }
+.coach-hand-result-summary { margin: 0; color: var(--ink); font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.coach-hand-result-detail { margin: 5px 0 0; color: #d1ded4; font-size: 12px; line-height: 1.55; }
+.coach-snapshot { display: grid; grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr); align-items: start; gap: clamp(18px, 3vw, 36px); }
+.coach-explanation, .coach-evidence { min-width: 0; }
+.coach-evidence { display: grid; align-content: start; }
 .coach-empty { padding: 25px 0 24px; border-bottom: 1px solid var(--line); }
 .decision-mark { display: flex; align-items: end; gap: 4px; height: 24px; margin-bottom: 13px; }
 .decision-mark span { width: 6px; border: 1px solid #8da992; border-radius: 3px 3px 1px 1px; background: #294c39; }
@@ -15,7 +22,20 @@
 .coach-empty h3 { margin-bottom: 6px; font-size: 13px; }
 .coach-empty p { max-width: 30ch; margin-bottom: 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
 .coach-subheading { margin: 14px 0 2px; color: #d9e4dc; font-size: 12px; }
-.coach-lesson { margin-top: 9px; padding: 13px 10px 11px; border-block: 1px solid #314a3a; }
+.coach-lesson { margin-top: 9px; padding: 13px 0 11px; border-block: 1px solid #314a3a; }
+.lesson-progress { --step-count: 5; margin: 0 0 15px; padding: 0; display: grid; grid-template-columns: repeat(var(--step-count), minmax(0, 1fr)); list-style: none; }
+.lesson-progress li { position: relative; min-width: 0; }
+.lesson-progress li::after { position: absolute; z-index: 0; top: 12px; left: 50%; right: -50%; height: 1px; background: #405547; content: ""; }
+.lesson-progress li:last-child::after { display: none; }
+.lesson-progress li[data-state="complete"]::after { background: #84c994; }
+.lesson-progress button { position: relative; z-index: 1; width: 100%; min-height: 50px; padding: 0 4px; display: flex; flex-direction: column; align-items: center; gap: 6px; border: 0; background: transparent; color: var(--muted); font: inherit; cursor: pointer; }
+.lesson-progress button:hover .lesson-step-marker { border-color: #a7c5a9; color: var(--ink); }
+.lesson-progress button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: 5px; }
+.lesson-step-marker { width: 25px; height: 25px; display: grid; place-items: center; border: 1px solid #5b7161; border-radius: 50%; background: #12251b; color: #cad8cd; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.lesson-progress li[data-state="complete"] .lesson-step-marker { border-color: #84c994; background: #244a33; color: #e4f1e5; }
+.lesson-progress li[data-state="current"] .lesson-step-marker { border-color: var(--gold); background: #5c4e26; color: #fff0b1; }
+.lesson-step-label { overflow: hidden; max-width: 100%; color: inherit; font-size: 11px; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+.lesson-progress li[data-state="current"] .lesson-step-label { color: #f0df9f; font-weight: 700; }
 .coach-lesson-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .lesson-label { color: #e6d99a; font-size: 12px; font-weight: 750; letter-spacing: .06em; }
 .lesson-count { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
@@ -24,6 +44,35 @@
 .lesson-navigation { display: flex; justify-content: space-between; gap: 10px; margin-top: 11px; }
 .lesson-navigation .quiet-button { min-height: 31px; }
 .lesson-navigation .quiet-button:disabled { cursor: default; opacity: .45; }
+.coach-chart { margin-top: 0; padding: 2px 0 14px; border-bottom: 1px solid var(--line); }
+.coach-chart h3 { margin: 0 0 10px; color: #d9e4dc; font-size: 13px; }
+.outcome-chart { height: 14px; display: flex; overflow: hidden; border: 1px solid #68806b; border-radius: 3px; background: #20362a; }
+.outcome-segment { min-width: 0; height: 100%; transition: width 180ms ease-out; }
+.outcome-win { background: #84c994; }
+.outcome-tie { background: #e3c76f; }
+.outcome-loss { background: #bd7771; }
+.outcome-legend { margin: 9px 0 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.outcome-legend > div { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.outcome-legend dt { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; }
+.outcome-legend dd { margin: 0 0 0 14px; color: var(--ink); font-size: 12px; font-variant-numeric: tabular-nums; }
+.chart-key { width: 8px; height: 8px; flex: none; display: inline-block; border-radius: 50%; background: currentColor; }
+.win-key { color: #84c994; }
+.tie-key { color: #e3c76f; }
+.loss-key { color: #bd7771; }
+.coach-chart .equity-chart-heading { margin-top: 16px; }
+.coach-numbers { padding-top: 14px; }
+.equity-chart { position: relative; height: 12px; overflow: visible; border: 1px solid #40594a; border-radius: 3px; background: #23392c; }
+.equity-fill { position: absolute; inset: 0 auto 0 0; background: #57916b; }
+.equity-marker, .pot-odds-marker { position: absolute; z-index: 1; top: 50%; width: 2px; height: 20px; transform: translate(-50%, -50%); }
+.equity-marker { background: #bce5b4; }
+.pot-odds-marker { background: var(--gold); }
+.equity-axis { display: flex; justify-content: space-between; margin-top: 5px; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.equity-legend { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 7px 14px; margin-top: 8px; color: #c5d4c8; font-size: 11px; }
+.equity-legend > span { display: inline-flex; align-items: center; gap: 5px; }
+.equity-legend b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.equity-key { color: #bce5b4; }
+.odds-key { color: var(--gold); border-radius: 0; }
+.chart-call-note { margin: 9px 0 0; color: var(--muted); font-size: 11px; }
 .metric-list { margin: 8px 0 0; }
 .metric-list div { min-height: 46px; padding-block: 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid #263d31; }
 .metric-list dt { display: grid; gap: 3px; color: #d3ddd5; font-size: 12px; }
@@ -87,6 +136,14 @@
 
 @media (max-width: 720px) {
   .coach-panel { min-height: 320px; }
+  .coach-snapshot { grid-template-columns: 1fr; gap: 18px; }
+  .outcome-legend { gap: 5px; }
   .review-panel { padding: 16px; }
   .review-layout { grid-template-columns: 1fr; gap: 22px; }
+}
+
+@media (max-width: 420px) {
+  .lesson-progress { margin-inline: -4px; }
+  .lesson-progress button { min-height: 48px; padding-inline: 1px; gap: 5px; }
+  .lesson-step-label { font-size: 11px; }
 }

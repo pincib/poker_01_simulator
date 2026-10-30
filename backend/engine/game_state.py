@@ -273,11 +273,11 @@ class GameState:
             return None
         return next((player for player in self.players if player.id == player_id), None)
 
-    def legal_actions(self) -> tuple[ActionType, ...]:
+    def legal_actions(self, *, allow_fold: bool = True) -> tuple[ActionType, ...]:
         player = self.current_player
         if player is None or self.hand_complete:
             return ()
-        actions = [ActionType.FOLD]
+        actions = [ActionType.FOLD] if allow_fold else []
         to_call = max(0, self.current_bet - player.current_bet)
         can_raise = self._has_raise_right(player.id) and self._has_opponent_with_chips(player.id)
         bounds = self.betting_bounds()
@@ -328,6 +328,8 @@ class GameState:
         player_id: str,
         action: ActionType | str,
         amount: int | None = None,
+        *,
+        allow_fold: bool = True,
     ) -> GameState:
         """Apply one legal action and return the next immutable hand snapshot.
 
@@ -344,7 +346,7 @@ class GameState:
             raise ValueError("There is no player waiting to act.")
         if player_id != actor.id:
             raise ValueError(f"It is {actor.id}'s turn, not {player_id}'s.")
-        if action not in self.legal_actions():
+        if action not in self.legal_actions(allow_fold=allow_fold):
             raise ValueError(f"{action.value} is not legal for {actor.id} in this state.")
 
         old_high_bet = self.current_bet
@@ -480,6 +482,8 @@ class GameState:
                 actor = state.current_player
                 if actor is not None and state.amount_to_call == 0 and not state._has_opponent_with_chips(actor.id):
                     state = replace(state, pending_action_ids=(), current_player_id=None)
+                elif actor is None and not any(p.is_active and p.stack > 0 for p in state.players):
+                    state = replace(state, pending_action_ids=(), current_player_id=None)
                 else:
                     return state
             state = state._advance_street()
@@ -539,6 +543,22 @@ class GameState:
                 burned_cards=burned,
                 deck_cursor=cursor,
                 current_player_id=pending[0],
+                pending_action_ids=pending,
+                last_full_raise_size=self.big_blind,
+                acted_since_full_raise=frozenset(),
+                acted_bet_levels=(),
+            )
+        if len(can_act) == 1 and can_act[0].current_bet < max(p.current_bet for p in players if p.is_active):
+            actor = can_act[0]
+            pending = (actor.id,)
+            return replace(
+                self,
+                players=tuple(players),
+                street=next_street,
+                community_cards=board,
+                burned_cards=burned,
+                deck_cursor=cursor,
+                current_player_id=actor.id,
                 pending_action_ids=pending,
                 last_full_raise_size=self.big_blind,
                 acted_since_full_raise=frozenset(),

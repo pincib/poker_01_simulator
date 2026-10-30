@@ -15,24 +15,24 @@ let gameSnapshot = null;
 
 async function loadServiceStatus() {
   status.dataset.state = "loading";
-  status.lastElementChild.textContent = "Connecting";
+  status.lastElementChild.textContent = "Conectando";
 
   try {
     const response = await fetch("/api/health", { headers: { Accept: "application/json" } });
-    if (!response.ok) throw new Error(`Server returned ${response.status}`);
+    if (!response.ok) throw new Error(`O servidor respondeu com o código ${response.status}`);
     const health = await response.json();
     const configResponse = await fetch("/api/config", { headers: { Accept: "application/json" } });
-    if (!configResponse.ok) throw new Error(`Configuration returned ${configResponse.status}`);
+    if (!configResponse.ok) throw new Error(`A configuração respondeu com o código ${configResponse.status}`);
     const config = await configResponse.json();
     apiConfig = config;
     configureVariantSelector(config);
 
     document.title = config.name;
     status.dataset.state = "online";
-    status.lastElementChild.textContent = health.status === "ok" ? "Local server ready" : "Service unavailable";
+    status.lastElementChild.textContent = health.status === "ok" ? "Servidor local pronto" : "Serviço indisponível";
   } catch {
     status.dataset.state = "offline";
-    status.lastElementChild.textContent = "Server unavailable";
+    status.lastElementChild.textContent = "Servidor indisponível";
   }
 }
 
@@ -68,32 +68,32 @@ async function postCoachRequest(path, payload) {
     body: JSON.stringify(payload),
   });
   const result = await response.json();
-  if (!response.ok) throw new Error(result.error || `Coach request failed (${response.status}).`);
+  if (!response.ok) throw new Error(result.error || `A solicitação ao coach falhou (código ${response.status}).`);
   return result;
 }
 
 async function loadGameState() {
   try {
     const response = await fetch("/api/game/state", { headers: { Accept: "application/json" } });
-    if (!response.ok) throw new Error("The table state could not be loaded.");
+    if (!response.ok) throw new Error("Não foi possível carregar o estado da mesa.");
     applyGameState(await response.json());
   } catch (error) {
-    showActionError(error.message || "The local game server is unavailable.");
+    showActionError(error.message || "O servidor local do jogo está indisponível.");
   }
 }
 
 async function startHand() {
   const button = document.getElementById("deal-button");
   button.disabled = true;
-  button.textContent = "Dealing…";
+  button.textContent = "Distribuindo…";
   clearActionMessage();
   try {
     const state = await postCoachRequest("/api/game/start", { variant: gameVariantSelect.value });
     applyGameState(state);
   } catch (error) {
     button.disabled = false;
-    button.textContent = "Deal hand";
-    showActionError(error.message || "The hand could not be dealt.");
+    button.textContent = "Distribuir mão";
+    showActionError(error.message || "Não foi possível distribuir a mão.");
   }
 }
 
@@ -106,7 +106,7 @@ async function submitGameAction(action, amount) {
     if (state.hand_complete) await refreshSessionReview();
   } catch (error) {
     setActionPending(false);
-    showActionError(error.message || "That action could not be applied.");
+    showActionError(error.message || "Não foi possível executar essa ação.");
   }
 }
 
@@ -122,13 +122,13 @@ function applyGameState(state) {
   dealButton.disabled = !state.started || !state.hand_complete;
   if (!state.started) {
     dealButton.disabled = false;
-    dealButton.textContent = "Deal hand";
+    dealButton.textContent = "Distribuir mão";
   } else if (state.hand_complete && state.hero_stack <= 0) {
-    dealButton.textContent = "Rebuy and deal";
+    dealButton.textContent = "Recomprar e distribuir";
   } else if (state.hand_complete) {
-    dealButton.textContent = "Next hand";
+    dealButton.textContent = "Próxima mão";
   } else {
-    dealButton.textContent = "Hand in progress";
+    dealButton.textContent = "Mão em andamento";
   }
   setActionPending(false);
   window.dispatchEvent(new CustomEvent("poker:game-state", { detail: state }));
@@ -156,16 +156,16 @@ function updateVariantPreview() {
   const nextHand = Boolean(gameSnapshot?.started && gameSnapshot.hand_complete);
   const variantId = gameVariantSelect.value;
   document.getElementById("variant-preview").textContent = variantId === "pot_limit_omaha"
-    ? "PLO4 high · 6 seats · $1/$2 blinds · $200 stacks · no rake. Bots use heuristics; coach equity is estimated. Review stays in local memory until the server stops."
-    : "Hold’em · 6 seats · $1/$2 blinds · $200 stacks. Bots use heuristics; session review stays in local memory until the server stops.";
+    ? "PLO4 high · 6 jogadores · blinds de $1/$2 · stacks de $200 · sem rake. Os adversários usam heurísticas; a equity do coach é estimada. A revisão fica na memória até o servidor ser encerrado."
+    : "Hold’em · 6 jogadores · blinds de $1/$2 · stacks de $200. Os adversários usam heurísticas; a revisão da sessão fica na memória até o servidor ser encerrado.";
   document.getElementById("table-title").textContent = nextHand
-    ? `Next hand · ${selected.label}`
+    ? `Próxima mão · ${selected.label}`
     : selected.label;
   document.getElementById("poker-table").setAttribute(
-    "aria-label", `${nextHand ? "Next hand" : "Six-handed"} · ${selected.label} table. Waiting for a hand.`,
+    "aria-label", `${nextHand ? "Próxima mão" : "Mesa com seis jogadores"} · mesa de ${selected.label}. Aguardando distribuição.`,
   );
   document.getElementById("table-meta").textContent =
-    `6-max · ${selected.betting_structure === "pot_limit" ? "Pot-limit" : "No-limit"} · $1/$2`;
+    `6-max · ${selected.betting_structure === "pot_limit" ? "Pot-limit" : "No-Limit"} · $1/$2`;
 }
 
 function clearActionMessage() {

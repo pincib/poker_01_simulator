@@ -64,6 +64,9 @@ class OpponentAITests(unittest.TestCase):
                 for i, (player, profile) in enumerate(zip(state.players, ("tight", "aggressive", "calling_station")))}
         action_count = 0
         while not state.hand_complete:
+            if state.street is Street.SHOWDOWN:
+                state = state.resolve_showdown()
+                break
             actor = state.current_player
             self.assertIsNotNone(actor, "unfinished hand must have a next actor")
             decision = bots[actor.id].decide(state, actor.id)
@@ -137,7 +140,7 @@ class OpponentAITests(unittest.TestCase):
         self.assertEqual(sizing.option, SizingOption.ALL_IN)
         self.assertEqual(sizing.bet_to, 90)
 
-    def test_profiles_have_requested_names_and_nit_folds_a_trash_utg_hand(self) -> None:
+    def test_profiles_have_requested_names_and_nit_calls_a_trash_utg_hand(self) -> None:
         self.assertEqual(
             [profile.display_name for profile in OpponentProfile],
             ["Nitty Norman", "Calling Kevin", "Aggro Alex", "Balanced Blair"],
@@ -158,7 +161,7 @@ class OpponentAITests(unittest.TestCase):
 
         decision = OpponentAI("Nitty Norman", seed=2).decide(state, actor.id)
 
-        self.assertEqual(decision.action, ActionType.FOLD)
+        self.assertEqual(decision.action, ActionType.CALL)
         self.assertIn(decision.action, state.legal_actions())
 
     def test_all_profiles_return_an_action_accepted_by_the_game_state(self) -> None:

@@ -78,10 +78,10 @@ export function renderActionBar(state) {
   const canCall = legal.has("call");
   const canCheck = legal.has("check");
 
-  document.getElementById("action-prompt").textContent = isHeroTurn ? `Your action · ${state.hero_position}` : "Opponent action";
+  document.getElementById("action-prompt").textContent = isHeroTurn ? `Sua ação · ${state.hero_position}` : "Ação do adversário";
   document.getElementById("action-hint").textContent = isHeroTurn
-    ? `Space check · F fold · C call · B ${legal.has("raise") ? "raise" : "bet"} to total`
-    : "The opponent profiles are choosing an action.";
+    ? `Espaço check · F fold · C call · B ${legal.has("raise") ? "raise" : "bet"} até o total`
+    : "Os perfis dos adversários estão escolhendo uma ação.";
   foldButton.disabled = requestPending || !isHeroTurn || !legal.has("fold");
   foldButton.hidden = !legal.has("fold");
   callButton.dataset.action = canCall ? "call" : "check";
@@ -90,7 +90,7 @@ export function renderActionBar(state) {
   callButton.hidden = !canCall && !canCheck;
   callButton.classList.toggle("call-button", canCall);
   callButton.classList.toggle("check-button", !canCall);
-  callButton.append(makeShortcut(canCall ? "C" : "Space"));
+  callButton.append(makeShortcut(canCall ? "C" : "Espaço"));
 
   sizing.hidden = !canBet;
   inputWrap.hidden = !canBet;
@@ -99,17 +99,17 @@ export function renderActionBar(state) {
   allIn.hidden = !legal.has("all_in");
   allIn.disabled = requestPending || !isHeroTurn || !legal.has("all_in");
   maxBet.disabled = requestPending || !isHeroTurn || !canBet;
-  maxBet.textContent = state.betting_structure === "pot_limit" ? "Pot max" : "Max";
+  maxBet.textContent = state.betting_structure === "pot_limit" ? "Pote máx." : "Máx.";
   maxBet.setAttribute(
     "aria-label",
-    `${state.betting_structure === "pot_limit" ? "Pot-limit maximum" : "Maximum legal"} bet or raise to ${formatMoney(state.raise_max)} total`,
+    `${state.betting_structure === "pot_limit" ? "Máximo no Pot-limit" : "Máximo permitido"} de aposta ou raise até ${formatMoney(state.raise_max)}`,
   );
   betButton.dataset.action = legal.has("raise") ? "raise" : "bet";
-  document.getElementById("raise-to-label").textContent = legal.has("raise") ? "Raise to total" : "Bet to total";
+  document.getElementById("raise-to-label").textContent = legal.has("raise") ? "Raise até o total" : "Aposta até o total";
   const limitNote = document.getElementById("bet-limit-note");
   limitNote.textContent = state.betting_structure === "pot_limit"
-    ? `Pot-limit · max ${legal.has("raise") ? "raise" : "bet"} to ${formatMoney(state.raise_max)} total`
-    : `Maximum total on this street: ${formatMoney(state.raise_max)}`;
+    ? `Pot-limit · ${legal.has("raise") ? "raise" : "bet"} máximo de ${formatMoney(state.raise_max)} no total`
+    : `Total máximo nesta street: ${formatMoney(state.raise_max)}`;
   limitNote.hidden = !canBet;
 
   const input = document.getElementById("raise-to-input");
@@ -155,7 +155,7 @@ function updateBetLabel() {
   const button = document.getElementById("bet-button");
   const value = Number.parseInt(input.value, 10);
   const target = Number.isFinite(value) ? formatMoney(value) : "—";
-  button.textContent = `${gameState?.legal_actions.includes("raise") ? "Raise" : "Bet"} to ${target}`;
+  button.textContent = `${gameState?.legal_actions.includes("raise") ? "Raise" : "Apostar"} até ${target}`;
   button.append(makeShortcut("B"));
   button.disabled = requestPending || !gameState || !Number.isFinite(value)
     || value < Number(input.min) || value > Number(input.max);
@@ -163,7 +163,7 @@ function updateBetLabel() {
 
 function setPending(pending) {
   if (!pending) return;
-  document.getElementById("action-status").textContent = "The table is dealing with your action…";
+  document.getElementById("action-status").textContent = "A mesa está processando sua ação…";
   document.getElementById("action-status").dataset.state = "loading";
 }
 

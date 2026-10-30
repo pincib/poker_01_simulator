@@ -345,7 +345,7 @@ class CoachService:
         additional_limitations = ()
         if opponent_id is not None and len(all_active_opponents) > 1:
             additional_limitations = (
-                "This snapshot models only the selected opponent in a multiway hand; its equity is not the hero's equity against the full field.",
+                "Esta análise considera apenas o adversário selecionado em uma mão multiway; a equity exibida não representa a equity contra todos os jogadores.",
             )
         return cls.analyze_decision(
             hero_hole=hero.hole_cards,
@@ -465,35 +465,35 @@ class CoachService:
             call_assessment = CallAssessment.NO_CALL
             advice = (
                 (
-                    "No call price is pending. Before the flop, use four-card structure, nut-suit potential, position, and stack depth; the range-based equity is only an estimate."
+                    "Não há call para pagar. Antes do flop, avalie a estrutura das quatro cartas, o potencial para nuts, a posição e a profundidade dos stacks; a equity baseada na faixa é apenas uma estimativa."
                     if not community else
-                    "No call price is pending. Evaluate made-hand strength and nut redraws with exactly two hole cards and three board cards; checking is valid when neither value nor fold equity has evidence."
+                    "Não há call para pagar. Avalie a força da mão formada e os redraws para nuts usando exatamente duas cartas da mão e três do board; o check é válido quando não há indícios de aposta por valor ou de fold equity."
                 ) if resolved_variant is GameVariant.POT_LIMIT_OMAHA else
-                "No call price is pending. Give a bet a value or bluff reason; checking is valid when neither has evidence."
+                "Não há call para pagar. Tenha um motivo de valor ou bluff para apostar; o check é válido quando não há evidências para nenhum dos dois."
             )
         elif equity_share > odds.required_equity_percentage:
             call_assessment = CallAssessment.PROFITABLE
             advice = (
                 (
-                    "The PLO4 preflop estimate is above the call price against this modeled range. Starting-hand structure and range width can change the result; future streets still need a plan."
+                    "No PLO4 pré-flop, a estimativa está acima do preço do call contra esta faixa modelada. A estrutura da mão inicial e a largura da faixa podem mudar o resultado; ainda é preciso planejar as próximas streets."
                     if not community else
-                    "The PLO4 equity estimate is above the call price before rake. It uses exact-two/three Omaha evaluation; account for redraws and side-pot eligibility before committing further."
+                    "A estimativa de equity no PLO4 está acima do preço do call antes do rake. O cálculo segue a regra de exatamente duas cartas da mão e três do board; considere redraws e elegibilidade a side pots antes de investir mais fichas."
                 ) if resolved_variant is GameVariant.POT_LIMIT_OMAHA else
-                "The estimated equity is above the call price. This is positive expected value before rake; future-street bets still need a plan."
+                "A equity estimada está acima do preço do call. O valor esperado é positivo antes do rake; ainda é preciso planejar as apostas nas próximas streets."
             )
         elif equity_share < odds.required_equity_percentage:
             call_assessment = CallAssessment.UNPROFITABLE
             advice = (
                 (
-                    "The PLO4 preflop estimate is below the call price against this modeled range. Recheck range width, position, and four-card structure; the model does not predict future betting choices."
+                    "No PLO4 pré-flop, a estimativa está abaixo do preço do call contra esta faixa modelada. Reavalie a largura da faixa, a posição e a estrutura das quatro cartas; o modelo não prevê as ações futuras."
                     if not community else
-                    "The PLO4 equity estimate is below the call price before rake. Recheck the four-card opponent range, nut outs and redraw risk; this estimate does not model future betting choices."
+                    "A estimativa de equity no PLO4 está abaixo do preço do call antes do rake. Reavalie a faixa de quatro cartas do adversário, os outs para nuts e o risco de redraw; esta estimativa não modela as ações futuras."
                 ) if resolved_variant is GameVariant.POT_LIMIT_OMAHA else
-                "The estimated equity is below the call price before rake and implied odds. Recheck the range and future-street plan."
+                "A equity estimada está abaixo do preço do call antes de considerar rake e implied odds. Reavalie a faixa e o plano para as próximas streets."
             )
         else:
             call_assessment = CallAssessment.BREAK_EVEN
-            advice = "Estimated equity matches the call price before rake. The result of this hand will not change that expectation."
+            advice = "A equity estimada corresponde ao preço do call antes do rake. O resultado desta mão não altera essa expectativa."
 
         if len(community) >= 3 and resolved_variant is GameVariant.POT_LIMIT_OMAHA:
             _, chosen = HandEvaluator.evaluate_plo_with_hand(hero, community)
@@ -507,13 +507,13 @@ class CoachService:
             spr_value = spr.value
             if spr_value <= 2:
                 if resolved_variant is GameVariant.POT_LIMIT_OMAHA:
-                    warning = f"SPR {spr_value:.1f}: stacks are close to the pot. In PLO4, include four-card structure preflop or nut potential and redraws postflop; a pair alone is not enough."
+                    warning = f"SPR {spr_value:.1f}: os stacks estão próximos do tamanho do pote. No PLO4, considere a estrutura das quatro cartas no pré-flop e o potencial para nuts e redraws no pós-flop; um par sozinho não basta."
                 elif len(community) >= 3 and _has_top_pair(hero, community):
-                    warning = f"SPR {spr_value:.1f}: you have top pair. Plan the remaining stack using the board and opponent range before committing."
+                    warning = f"SPR {spr_value:.1f}: você tem top pair. Planeje o stack restante considerando o board e a faixa do adversário antes de investir mais fichas."
                 else:
-                    warning = f"SPR {spr_value:.1f}: effective stacks are close to the pot. Check hand strength and opponent range before committing."
+                    warning = f"SPR {spr_value:.1f}: os stacks efetivos estão próximos do pote. Avalie a força da mão e a faixa do adversário antes de investir mais fichas."
             else:
-                warning = f"SPR {spr_value:.1f}: compare the effective stack with the pot as future bets develop."
+                warning = f"SPR {spr_value:.1f}: compare o stack efetivo com o pote conforme as próximas apostas acontecerem."
 
         draw_analysis = None
         if resolved_variant is GameVariant.POT_LIMIT_OMAHA and len(community) in (3, 4, 5):
@@ -525,14 +525,14 @@ class CoachService:
 
         limitations = []
         if source in ("uniform four-card combinations", "estimated multiway ranges", "action-filtered multiway ranges") and resolved_variant is GameVariant.POT_LIMIT_OMAHA:
-            limitations.append("Opponent ranges are modeled samples; position/action adjustments are heuristics, not observed cards or a solver range.")
+            limitations.append("As faixas dos adversários são amostras modeladas; os ajustes por posição e ação são heurísticas, não cartas observadas nem uma faixa de solver.")
         deterministic = len(community) == 5 and opponent_hole is not None
         if not deterministic:
-            limitations.append("Equity is a Monte Carlo estimate over the recorded range model; it does not model future opponent actions.")
+            limitations.append("A equity é uma estimativa de Monte Carlo baseada na faixa registrada; não modela as ações futuras dos adversários.")
         else:
-            limitations.append("Known hands on the river are deterministic; this result does not model future opponent actions.")
+            limitations.append("Mãos conhecidas no river têm resultado determinístico; este cálculo não modela ações futuras dos adversários.")
         if opponent_ranges is not None:
-            limitations.append("SPR and side-pot decisions are simplified for the shortest active opponent.")
+            limitations.append("Os cálculos de SPR e side pot são simplificados e usam o adversário ativo com o menor stack.")
         limitations.extend(str(value) for value in additional_limitations)
 
         return CoachSnapshot(
@@ -599,7 +599,7 @@ class CoachService:
             score = plo_starting_hand_score(hero)
             return BetPurposeResult(
                 BetPurpose.UNMODELED,
-                f"PLO4 preflop structure score {score:.1f}/100 is a heuristic, not equity; no opponent response or four-card range is modeled for bet-purpose classification.",
+                f"A pontuação da estrutura pré-flop no PLO4 é {score:.1f}/100 e representa uma heurística, não equity; a classificação do propósito da aposta não modela a resposta do adversário nem a faixa de quatro cartas.",
                 bet_amount, 0, 0, 0, 0, 0, 0, variant.value,
             )
 
@@ -607,10 +607,10 @@ class CoachService:
             hand_class = starting_hand_class(hero)
             premium = get_opening_range(Position(hero_position), 10).frequency_for(hero) >= 0.9
             if premium:
-                return BetPurposeResult(BetPurpose.VALUE, "This starting hand is in the top positional opening range.", bet_amount, 0, 1, 0, 0, 1, 0, variant.value)
+                return BetPurposeResult(BetPurpose.VALUE, "Esta mão inicial está entre as melhores mãos de abertura para esta posição.", bet_amount, 0, 1, 0, 0, 1, 0, variant.value)
             if profile is OpponentProfile.NIT:
-                return BetPurposeResult(BetPurpose.BLUFF, "The hand is outside the top range and a nit profile can fold better unpaired hands.", bet_amount, 0, 0, 1, 0, 0, 0.5, variant.value)
-            return BetPurposeResult(BetPurpose.POINTLESS, f"{hand_class} is not a premium opening hand; no clear value or fold target is modeled.", bet_amount, 0, 0, 0, 1, 0, 0, variant.value)
+                return BetPurposeResult(BetPurpose.BLUFF, "A mão está fora da faixa forte e um perfil conservador pode desistir de mãos melhores sem par.", bet_amount, 0, 0, 1, 0, 0, 0.5, variant.value)
+            return BetPurposeResult(BetPurpose.POINTLESS, f"{hand_class} não é uma mão inicial premium; o modelo não identificou um alvo claro para aposta por valor ou bluff.", bet_amount, 0, 0, 0, 1, 0, 0, variant.value)
 
         blockers = hero + community
         if len(set(blockers)) != len(blockers):
@@ -667,13 +667,13 @@ class CoachService:
 
         if worse and expected_worse_calls >= expected_better_calls and expected_worse_calls >= expected_better_folds:
             purpose = BetPurpose.VALUE
-            evidence = f"About {worse / valid_count * 100:.0f}% of modeled hands are worse and may call."
+            evidence = f"Cerca de {worse / valid_count * 100:.0f}% das mãos modeladas são piores e podem pagar."
         elif better and expected_better_folds > expected_worse_calls and expected_better_folds / valid_count >= 0.25:
             purpose = BetPurpose.BLUFF
-            evidence = f"The bet needs better hands to fold; about {expected_better_folds / valid_count * 100:.0f}% of the modeled range is expected to fold better hands."
+            evidence = f"A aposta precisa fazer mãos melhores desistirem; espera-se que cerca de {expected_better_folds / valid_count * 100:.0f}% da faixa modelada desista com mãos melhores."
         else:
             purpose = BetPurpose.POINTLESS
-            evidence = "Most continuing hands are at least as strong; few better hands are expected to fold."
+            evidence = "A maioria das mãos que continua tem força igual ou maior; poucas mãos melhores devem desistir."
         return BetPurposeResult(
             purpose, evidence, bet_amount, valid_count, worse, better, tied,
             expected_worse_calls, expected_better_folds, variant.value,
@@ -888,15 +888,15 @@ class SessionTracker:
                 "hands_reviewed": len(variant_hands),
                 "flags": [flag.to_dict() for flag in flags],
                 "limitations": [
-                    "Leak indicators are review prompts, not proof of a mistake.",
-                    "Equity-based call indicators inherit the range and Monte Carlo uncertainty recorded for each decision.",
-                    *(["Nut-potential, redraw, and blocker patterns are shown as hand evidence and are not yet scored as standalone leaks."] if variant is GameVariant.POT_LIMIT_OMAHA else []),
+                    "Indicadores de possíveis leaks são pontos para revisão, não provas de erro.",
+                    "Indicadores de call baseados em equity também dependem da faixa e da incerteza de Monte Carlo registradas em cada decisão.",
+                    *(["Potencial para nuts, redraws e blockers aparecem como evidências da mão, mas ainda não são avaliados como leaks independentes."] if variant is GameVariant.POT_LIMIT_OMAHA else []),
                 ],
             }
             all_flags.extend(flags)
         flags = all_flags
         study_target = flags[0].title if flags else (
-            "Record a few hands with your decision and reason to create a useful weekly review."
+            "Registre algumas mãos, suas decisões e os motivos para criar uma revisão semanal útil."
         )
         return WeeklyLeakReport(
             since.isoformat(),
@@ -905,10 +905,10 @@ class SessionTracker:
             tuple(flags),
             study_target,
             (
-                "Choose one repeated decision to study.",
-                "Mark five relevant hands and record the price, board, action, and reason.",
-                "Review one marked hand and name one alternative and one uncertainty.",
-                "Write what changed and what still needs checking.",
+                "Escolha uma decisão recorrente para estudar.",
+                "Marque cinco mãos relevantes e registre o preço, o board, a ação e o motivo.",
+                "Revise uma mão marcada e identifique uma alternativa e uma incerteza.",
+                "Anote o que mudou e o que ainda precisa ser conferido.",
             ),
             by_variant,
         )
@@ -925,15 +925,15 @@ def _variant_leak_flags(decisions: Sequence[DecisionNote], variant: GameVariant)
         rate = len(negative_calls) / len(calls) * 100
         if variant is GameVariant.POT_LIMIT_OMAHA:
             key = "plo_negative_ev_calls"
-            title = "PLO calls below estimated break-even"
-            message = f"{len(negative_calls)} of {len(calls)} reviewed PLO calls were below the recorded equity estimate at the call price. Check each four-card range and uncertainty note."
+            title = "Calls de PLO abaixo do break-even estimado"
+            message = f"{len(negative_calls)} de {len(calls)} calls de PLO revisados ficaram abaixo da equity registrada para o preço do call. Confira cada faixa de quatro cartas e a observação sobre incerteza."
         else:
             key = "negative_ev_calls"
-            title = "Hold'em calls below break-even equity"
-            message = f"{len(negative_calls)} of {len(calls)} reviewed Hold'em call decisions were below the recorded equity estimate at the call price."
+            title = "Calls de Hold’em abaixo da equity de break-even"
+            message = f"{len(negative_calls)} de {len(calls)} decisões de call no Hold’em ficaram abaixo da equity registrada para o preço do call."
         flags.append(LeakFlag(
             key, title, len(negative_calls), len(calls), rate, message,
-            "Compare the call price, estimated range, and future-street plan.",
+            "Compare o preço do call, a faixa estimada e o plano para as próximas streets.",
         ))
 
     if variant is GameVariant.TEXAS_HOLDEM:
@@ -942,9 +942,9 @@ def _variant_leak_flags(decisions: Sequence[DecisionNote], variant: GameVariant)
         if len(cbet_opportunities) >= 3 and len(cbet_folds) / len(cbet_opportunities) >= 0.60:
             rate = len(cbet_folds) / len(cbet_opportunities) * 100
             flags.append(LeakFlag(
-                "overfold_cbet", "Frequent folds to continuation bets", len(cbet_folds), len(cbet_opportunities), rate,
-                f"You folded to {len(cbet_folds)} of {len(cbet_opportunities)} recorded Hold'em continuation bets; review the price and board before deciding.",
-                "Review the price and board texture before deciding.",
+                "overfold_cbet", "Desistências frequentes contra continuation bets", len(cbet_folds), len(cbet_opportunities), rate,
+                f"Você deu fold diante de {len(cbet_folds)} de {len(cbet_opportunities)} continuation bets registradas no Hold’em; revise o preço e o board antes de decidir.",
+                "Revise o preço e a textura do board antes de decidir.",
             ))
 
         postflop_entries = [
@@ -955,9 +955,9 @@ def _variant_leak_flags(decisions: Sequence[DecisionNote], variant: GameVariant)
         if len(postflop_entries) >= 3 and len(oop_entries) / len(postflop_entries) >= 0.45:
             rate = len(oop_entries) / len(postflop_entries) * 100
             flags.append(LeakFlag(
-                "out_of_position", "Review Hold'em pots played out of position", len(oop_entries), len(postflop_entries), rate,
-                f"{len(oop_entries)} of {len(postflop_entries)} recorded Hold'em postflop entries were out of position. Check whether entry and later-street plans were justified.",
-                "Review position, entry range, and later-street plan.",
+                "out_of_position", "Revise potes de Hold’em jogados fora de posição", len(oop_entries), len(postflop_entries), rate,
+                f"{len(oop_entries)} de {len(postflop_entries)} entradas pós-flop registradas no Hold’em foram fora de posição. Confira se a entrada na mão e o plano para as próximas streets eram justificados.",
+                "Revise a posição, a faixa de entrada e o plano para as próximas streets.",
             ))
     return tuple(flags)
 
@@ -978,168 +978,168 @@ def _learning_steps(
     draw_analysis: Mapping[str, object] | None,
     available_actions: Sequence[str],
 ) -> tuple[Mapping[str, str], ...]:
-    street = {0: "preflop", 3: "the flop", 4: "the turn", 5: "the river"}.get(len(board), "this decision")
+    street = {0: "pré-flop", 3: "flop", 4: "turn", 5: "river"}.get(len(board), "esta decisão")
     context = (
-        f"On {street}, the pot is {pot} chips and calling costs {call_amount} chips. "
-        "First read the price, then decide what range and future cards make the call worthwhile."
+        f"No {street}, o pote tem {pot} fichas e o call custa {call_amount} fichas. "
+        "Primeiro avalie o preço; depois, considere a faixa e as cartas futuras que tornam o call vantajoso."
         if call_amount else
-        f"On {street}, the pot is {pot} chips and there is no call to make. "
-        "Checking is free; a bet needs a clear reason such as worse hands calling or better hands folding."
+        f"No {street}, o pote tem {pot} fichas e não há call para pagar. "
+        "Dar check é gratuito; uma aposta precisa de um motivo claro, como mãos piores pagarem ou mãos melhores desistirem."
     )
     if hand_description:
-        context += f" Your current made hand is {hand_description}."
+        context += f" Sua mão formada no momento é {hand_description}."
     if available_actions:
         labels = {"fold": "fold", "check": "check", "call": "call", "bet": "bet", "raise": "raise", "all_in": "all-in"}
-        context += " The legal actions from the server are: " + ", ".join(
+        context += " Ações permitidas pela mesa: " + ", ".join(
             labels.get(action, action) for action in available_actions
         ) + "."
 
     concepts: list[str] = []
     if variant is GameVariant.POT_LIMIT_OMAHA:
         concepts.append(
-            "PLO4 rule: a showdown hand uses exactly two of your four private cards and exactly three board cards. "
-            "A pair may be part of the result, but it still has to follow that two-plus-three rule."
+            "Regra do PLO4: no showdown, use exatamente duas das quatro cartas da mão e exatamente três cartas do board. "
+            "Um par pode fazer parte da mão final, desde que essa regra de duas mais três seja respeitada."
         )
         if not board:
             concepts.append(
-                "Before the flop, look at how all four cards work together: connected ranks and an ace-high suited pair "
-                "can create more nut potential than one attractive pair on its own."
+                "Antes do flop, observe como as quatro cartas funcionam em conjunto: cartas conectadas e um par suited com ás "
+                "podem criar mais potencial para nuts do que um par atraente isolado."
             )
         if draw_analysis is not None:
             straight_outs = len(draw_analysis.get("straight_outs", ()))
             if straight_outs:
-                wrap_definition = "A wrap is a draw with more than eight distinct straight-completing cards. "
+                wrap_definition = "Wrap é um draw com mais de oito cartas distintas que completam uma sequência. "
                 concepts.append(
                     wrap_definition
                     + (
-                        f"This spot has {straight_outs} available straight cards, so it meets that threshold."
+                        f"Esta situação tem {straight_outs} cartas disponíveis para completar a sequência e atinge esse limite."
                         if draw_analysis.get("is_wrap") else
-                        f"This spot has {straight_outs} available straight cards, so it does not meet that threshold."
+                        f"Esta situação tem {straight_outs} cartas disponíveis para completar a sequência e não atinge esse limite."
                     )
                 )
             flush_outs = len(draw_analysis.get("flush_outs", ()))
             nut_flush_outs = len(draw_analysis.get("nut_flush_outs", ()))
             if flush_outs:
                 concepts.append(
-                    f"A flush draw has {flush_outs} available cards that complete a flush using the Omaha two-plus-three rule; "
-                    f"{nut_flush_outs} make the nut flush on that board. A non-nut flush can still be behind a higher flush."
+                    f"O flush draw tem {flush_outs} cartas disponíveis que completam um flush pela regra Omaha de duas mais três; "
+                    f"{nut_flush_outs} formam o nut flush neste board. Um flush que não é nuts ainda pode perder para outro mais alto."
                 )
             nut_outs = len(draw_analysis.get("nut_outs", ()))
             non_nut_outs = len(draw_analysis.get("non_nut_outs", ()))
             concepts.append(
-                "The nuts are the strongest legal hand possible on the current board. Nut potential means a path to that "
-                "hand; it does not guarantee a win because an opponent may tie or a later card may change the board."
+                "Nuts é a mão permitida mais forte possível no board atual. Potencial para nuts significa ter um caminho até essa "
+                "mão; isso não garante a vitória, pois um adversário pode empatar ou uma carta posterior pode mudar o board."
             )
             if nut_outs or non_nut_outs:
                 concepts.append(
-                    f"The draw check marks {nut_outs} cards as nut outs and {non_nut_outs} as non-nut improvements. "
-                    "These describe the next-board hand rank, not a guaranteed pot."
+                    f"A análise de draws identifica {nut_outs} outs para nuts e {non_nut_outs} melhorias que não formam nuts. "
+                    "Essas cartas indicam a força da mão no próximo board, não garantem o pote."
                 )
             blocker_combos = int(draw_analysis.get("hero_blocked_opponent_combos", 0) or 0)
             if blocker_combos:
                 concepts.append(
-                    f"A blocker is a card you hold that removes possible opponent combinations; these four cards "
-                    f"remove {blocker_combos} combinations from an unweighted deck count. A blocker changes a range, "
-                    "but is not a made hand by itself."
+                    f"Blocker é uma carta que você tem e que remove combinações possíveis do adversário; estas quatro cartas "
+                    f"removem {blocker_combos} combinações de um baralho sem ponderação. Um blocker altera a faixa, "
+                    "mas não forma uma mão por si só."
                 )
             redraws = draw_analysis.get("opponent_redraws", ())
             if redraws:
                 redraw_count = sum(len(item.get("river_cards", ())) for item in redraws if isinstance(item, Mapping))
                 concepts.append(
-                    f"A redraw is a later card that can overtake a hand after it improves. The exposed opponent "
-                    f"has {redraw_count} modeled turn-river redraw runouts in this analysis."
+                    f"Redraw é uma carta posterior que pode superar uma mão depois que ela melhora. O adversário com cartas reveladas "
+                    f"tem {redraw_count} sequências de turn e river com redraw modeladas nesta análise."
                 )
             elif draw_analysis.get("unverified_outs"):
                 concepts.append(
-                    "A redraw is a later card that can overtake a hand after it improves. Opponent cards are hidden, "
-                    "so this analysis cannot verify which outs stay clean or what redraws the field has."
+                    "Redraw é uma carta posterior que pode superar uma mão depois que ela melhora. As cartas dos adversários estão ocultas, "
+                    "então esta análise não confirma quais outs continuam limpos nem quais redraws os outros jogadores têm."
                 )
         if not board:
             concepts.append(
-                "Nut potential means the chance to make the best possible hand on later boards; it is a plan for "
-                "future cards, not a promise to win."
+                "Potencial para nuts é a chance de formar a melhor mão possível nos próximos boards; é um plano para "
+                "as cartas futuras, não uma promessa de vitória."
             )
     else:
         concepts.append(
-            "In Hold’em, your best five-card hand can use zero, one, or two of your private cards. "
-            "An opponent range is a set of possible hands, not a known hand."
+            "No Hold’em, sua melhor mão de cinco cartas pode usar zero, uma ou duas cartas da mão. "
+            "A faixa do adversário é um conjunto de mãos possíveis, não uma mão conhecida."
         )
     concepts.append(
-        "Equity is your expected share of the pot across the modeled outcomes; a split pot counts as a share, "
-        "so equity is not exactly the same as the chance of winning outright."
+        "Equity é sua fatia esperada do pote nos resultados modelados; em um pote dividido, cada jogador recebe uma parte, "
+        "por isso equity não é exatamente o mesmo que a chance de ganhar o pote inteiro."
     )
 
     if call_amount and pot_odds is not None:
         gap = equity - pot_odds
         comparison = (
-            f"The estimated equity is {abs(gap):.1f} percentage points above the immediate break-even price."
+            f"A equity estimada está {abs(gap):.1f} pontos percentuais acima do preço imediato de break-even."
             if gap > 0 else
-            f"The estimated equity is {abs(gap):.1f} percentage points below the immediate break-even price."
+            f"A equity estimada está {abs(gap):.1f} pontos percentuais abaixo do preço imediato de break-even."
             if gap < 0 else
-            "The estimated equity matches the immediate break-even price."
+            "A equity estimada corresponde ao preço imediato de break-even."
         )
         numbers = (
-            f"Pot odds of {pot_odds:.1f}% are the break-even equity for this call: call amount divided by "
-            f"the pot after calling ({call_amount} ÷ {pot + call_amount}). The model estimates {equity:.1f}% equity. "
+            f"Pot odds de {pot_odds:.1f}% representam a equity de break-even para este call: o valor a pagar dividido "
+            f"pelo pote após o call ({call_amount} ÷ {pot + call_amount}). O modelo estima {equity:.1f}% de equity. "
             f"{comparison}"
         )
         if ev_call is not None:
-            numbers += f" The call EV is {ev_call:+.1f} chips on average if this modeled spot repeats, before rake."
+            numbers += f" O EV do call é de {ev_call:+.1f} fichas em média se esta situação modelada se repetir, antes do rake."
     else:
         numbers = (
-            f"Pot odds do not apply because there is no call price. The {equity:.1f}% equity is a modeled expected "
-            "pot share if the hand reaches showdown; it does not, by itself, show that betting is profitable."
+            f"Pot odds não se aplicam porque não há call para pagar. A equity de {equity:.1f}% é uma fatia esperada modelada "
+            "do pote caso a mão chegue ao showdown; por si só, isso não mostra que apostar seja lucrativo."
         )
     if spr is not None:
         numbers += (
-            f" SPR is {spr:.1f}: the shortest relevant effective stack divided by the pot. "
-            "It helps estimate how many large bets may remain before stacks are committed."
+            f" O SPR é {spr:.1f}: o menor stack efetivo relevante dividido pelo pote. "
+            "Ele ajuda a estimar quantas apostas grandes ainda cabem antes de comprometer os stacks."
         )
 
     if call_amount:
         if assessment is CallAssessment.PROFITABLE:
             process = (
-                "The price comparison gives a reason to consider continuing against this modeled range. "
-                "It does not automatically make a raise better; include position and your plan for later streets. "
-                "A well-reasoned choice is judged by its inputs, not by who wins this pot."
+                "A comparação do preço dá um motivo para considerar continuar contra esta faixa modelada. "
+                "Isso não significa automaticamente que raise seja melhor; considere a posição e seu plano para as próximas streets. "
+                "Uma decisão bem fundamentada é avaliada pelas informações usadas, não por quem ganhou este pote."
             )
         elif assessment is CallAssessment.UNPROFITABLE:
             process = (
-                "Treat the price comparison as a prompt to inspect the assumptions, not as a grade. "
-                "Check whether the range includes enough weaker hands or draws, then compare calling with folding. "
-                "The eventual result does not tell you whether that reasoning was sound."
+                "Use a comparação do preço como convite para revisar as suposições, não como nota. "
+                "Confira se a faixa inclui mãos piores ou draws suficientes e compare call com fold. "
+                "O resultado final não determina se o raciocínio foi correto."
             )
         else:
             process = (
-                "This estimate sits at the break-even line, where small changes to the range can change the answer. "
-                "Name the assumption that matters most before choosing call, fold, or raise."
+                "Esta estimativa está no limite de break-even, onde pequenas mudanças na faixa podem alterar a conclusão. "
+                "Identifique a suposição mais importante antes de escolher entre call, fold ou raise."
             )
     else:
         process = (
-            "There is no price to call. If you bet, name a weaker hand that can call for value or a better hand "
-            "that may fold. If neither is clear, checking can keep the decision simple."
+            "Não há preço para pagar no call. Se apostar, identifique uma mão pior que possa pagar por valor ou uma mão melhor "
+            "que possa desistir. Se nenhum caso estiver claro, dar check pode simplificar a decisão."
         )
 
     question = (
-        "Which turn cards make you the nuts, and which could improve an opponent instead?"
+        "Quais cartas no turn completam nuts para você e quais podem melhorar a mão do adversário?"
         if variant is GameVariant.POT_LIMIT_OMAHA and board else
-        "Which two cards work together best, and what kind of nut hand could they make?"
+        "Quais duas cartas funcionam melhor juntas e que tipo de mão nuts elas podem formar?"
         if variant is GameVariant.POT_LIMIT_OMAHA else
-        "Which hands in the modeled range are you ahead of, and how might the next card change that?"
+        "Contra quais mãos da faixa modelada você está à frente, e como a próxima carta pode mudar isso?"
     )
     if call_amount:
         question = (
-            "Which assumptions about the opponent's range would move your equity above or below the call price?"
+            "Quais suposições sobre a faixa do adversário fariam sua equity ficar acima ou abaixo do preço do call?"
         )
         if variant is GameVariant.POT_LIMIT_OMAHA and board:
-            question += " Which turn cards make you the nuts, and which could give an opponent a redraw?"
+            question += " Quais cartas no turn completam nuts para você e quais podem dar um redraw ao adversário?"
 
     return (
-        {"kind": "context", "label": "THE SPOT", "title": "Start with what is happening", "body": context},
-        {"kind": "concept", "label": "POKER IDEA", "title": "Name the rule or concept", "body": " ".join(concepts)},
-        {"kind": "estimate", "label": "MATH ESTIMATE", "title": "Connect the numbers", "body": numbers},
-        {"kind": "suggestion", "label": "COACH SUGGESTION", "title": "Build a process, not a verdict", "body": f"{advice} {process}"},
-        {"kind": "practice", "label": "TAKE IT FORWARD", "title": "One question for next time", "body": question},
+        {"kind": "context", "label": "A SITUAÇÃO", "title": "Comece pelo que está acontecendo", "body": context},
+        {"kind": "concept", "label": "CONCEITO DE POKER", "title": "Identifique a regra ou o conceito", "body": " ".join(concepts)},
+        {"kind": "estimate", "label": "ESTIMATIVA MATEMÁTICA", "title": "Relacione os números", "body": numbers},
+        {"kind": "suggestion", "label": "SUGESTÃO DO COACH", "title": "Construa um processo, não um veredito", "body": f"{advice} {process}"},
+        {"kind": "practice", "label": "LEVE PARA A PRÓXIMA", "title": "Uma pergunta para a próxima vez", "body": question},
     )
 
 

@@ -1,11 +1,11 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#0b1c16">
-    <meta name="description" content="A local poker training simulator and coaching workspace.">
-    <title>Poker Mastery Simulator</title>
+    <meta name="description" content="Simulador local de poker para treino e análise de decisões.">
+    <title>Poker Mastery · Simulador</title>
     <link rel="stylesheet" href="/css/table.css">
     <link rel="stylesheet" href="/css/hud.css">
     <script type="module" src="/js/app.js"></script>
@@ -13,15 +13,15 @@
   <body>
     <div class="app-shell">
       <header class="topbar">
-        <a class="brand" href="/" aria-label="Poker Mastery Simulator home">
+        <a class="brand" href="/" aria-label="Página inicial do Poker Mastery">
           <span class="brand-mark" aria-hidden="true">PM</span>
-          <span class="brand-copy"><strong>Poker Mastery</strong><span>TRAINING TABLE</span></span>
+          <span class="brand-copy"><strong>Poker Mastery</strong><span>MESA DE TREINO</span></span>
         </a>
         <div class="topbar-meta">
-          <span class="local-label"><span class="local-dot"></span>Runs on this device</span>
-          <button id="coach-mode-toggle" class="coach-top-toggle" type="button" aria-pressed="true">Coach on</button>
+          <span class="local-label"><span class="local-dot"></span>Executado neste dispositivo</span>
+          <button id="coach-mode-toggle" class="coach-top-toggle" type="button" aria-pressed="true">Coach ligado</button>
           <span id="service-status" class="service-status" role="status" aria-live="polite">
-            <span class="status-dot"></span><span>Connecting</span>
+            <span class="status-dot"></span><span>Conectando</span>
           </span>
         </div>
       </header>
@@ -29,18 +29,28 @@
       <main class="workspace">
         <section class="practice-heading" aria-labelledby="page-title">
           <div>
-            <h1 id="page-title">Training table</h1>
-            <p class="intro">Play a hand, then review the decision with the numbers that matter.</p>
+            <h1 id="page-title">Mesa de treino</h1>
+            <p class="intro">Jogue uma mão e analise a decisão com os números que importam.</p>
           </div>
           <div class="game-select-wrap">
-            <label for="game-variant">Game</label>
+            <label for="game-variant">Modalidade</label>
             <select id="game-variant" aria-describedby="variant-note variant-preview">
               <option value="texas_holdem">Texas Hold’em</option>
-              <option value="pot_limit_omaha">Pot-Limit Omaha</option>
+              <option value="pot_limit_omaha">Omaha Pot-Limit</option>
             </select>
-            <span id="variant-note" class="visually-hidden">Choose the rules for the next hand. The game cannot change during a hand.</span>
+            <span id="variant-note" class="visually-hidden">Escolha as regras da próxima mão. A modalidade não pode ser alterada durante uma mão.</span>
             <p id="variant-preview" class="variant-preview" role="status" aria-live="polite"></p>
           </div>
+        </section>
+
+        <section class="table-reading" aria-labelledby="reading-title">
+          <div class="reading-head"><h2 id="reading-title">Leia a mesa</h2><span id="reading-context">Dica de pensamento · antes da mão</span></div>
+          <div class="reading-grid">
+            <article class="reading-item"><strong>Observe a ação</strong><p id="reading-action">Repare em quem já colocou fichas e no preço para continuar. A força da faixa adversária muda com a posição e a ação.</p></article>
+            <article class="reading-item"><strong>Pense na posição</strong><p id="reading-position">Sua posição determina quantos jogadores ainda podem agir e quanta informação você terá nas próximas streets.</p></article>
+            <article class="reading-item"><strong>Separe mão de resultado</strong><p>Uma decisão boa pode perder esta mão. Avalie se sua escolha faz sentido repetida muitas vezes, com as mesmas informações.</p></article>
+          </div>
+          <p class="ask-yourself"><b>Pergunta antes de agir:</b> <span id="reading-question">que preço estou pagando e quais cartas futuras podem mudar o plano?</span></p>
         </section>
 
         <div class="practice-grid">
@@ -48,53 +58,53 @@
             <div class="panel-heading">
               <div>
                 <h2 id="table-title">Texas Hold’em</h2>
-                <span class="table-meta" id="table-meta">6-max · No-limit · $1/$2</span>
+                <span class="table-meta" id="table-meta">6-max · No-Limit · $1/$2</span>
               </div>
-              <span id="table-hand-status" class="hand-state"><span class="status-dot"></span><span id="table-hand-label">Waiting for a hand</span></span>
+              <span id="table-hand-status" class="hand-state"><span class="status-dot"></span><span id="table-hand-label">Aguardando uma mão</span></span>
             </div>
 
             <div class="table-stage">
-              <div class="table-oval" id="poker-table" aria-label="Six-handed Texas Hold’em table">
-                <div id="table-seats" class="table-seats" aria-label="Players"></div>
+              <div class="table-oval" id="poker-table" aria-label="Mesa de Texas Hold’em com seis jogadores">
+                <div id="table-seats" class="table-seats" aria-label="Jogadores"></div>
                 <div class="table-center">
                   <div class="pot-strip">
-                    <div class="pot-readout"><span>Pot</span><strong id="table-pot">$0.00</strong></div>
+                    <div class="pot-readout"><span>Pote</span><strong id="table-pot">$0,00</strong></div>
                     <span class="table-divider" aria-hidden="true"></span>
                     <div class="pot-readout"><span>Blinds</span><strong id="table-blinds">$1/$2</strong></div>
                     <span class="table-divider" aria-hidden="true"></span>
                     <div class="pot-readout"><span>SPR</span><strong id="table-spr">—</strong></div>
                     <span class="table-divider" aria-hidden="true"></span>
-                    <div class="pot-readout"><span>Round</span><strong id="table-street">Waiting</strong></div>
+                    <div class="pot-readout"><span>Etapa</span><strong id="table-street">Aguardando</strong></div>
                   </div>
-                  <div id="community-cards" class="community-cards" aria-label="Community cards"></div>
-                  <p id="table-message" class="empty-table-message" role="status" aria-live="polite">Deal a hand to begin. Your cards stay private.</p>
+                  <div id="community-cards" class="community-cards" aria-label="Cartas comunitárias"></div>
+                  <p id="table-message" class="empty-table-message" role="status" aria-live="polite">Distribua uma mão para começar. Suas cartas ficam privadas.</p>
                 </div>
               </div>
             </div>
 
             <div class="table-footer">
-              <div class="stack-readout"><span>Your stack</span><strong id="hero-stack">$200.00</strong></div>
-              <button id="deal-button" class="primary-button" type="button">Deal hand</button>
+              <div class="stack-readout"><span>Seu stack</span><strong id="hero-stack">$200,00</strong></div>
+              <button id="deal-button" class="primary-button" type="button">Distribuir mão</button>
             </div>
-            <section id="action-bar" class="action-bar" aria-label="Poker actions" hidden>
+            <section id="action-bar" class="action-bar" aria-label="Ações de poker" hidden>
               <div class="action-context">
-                <strong id="action-prompt">Your action</strong>
-                <span id="action-hint">Space check · F fold · C call · B size bet</span>
+                <strong id="action-prompt">Sua ação</strong>
+                <span id="action-hint">Espaço check · F fold · C call · B tamanho da aposta</span>
               </div>
               <div class="action-controls">
                 <button id="fold-button" class="action-button fold-button" type="button" data-action="fold">Fold <kbd>F</kbd></button>
-                <button id="call-check-button" class="action-button call-button" type="button" data-action="check">Check <kbd>Space</kbd></button>
-                <div id="size-presets" class="size-presets" aria-label="Bet sizing presets">
-                  <button class="size-button" type="button" data-pot-fraction="0.33">⅓ pot</button>
-                  <button class="size-button selected" type="button" data-pot-fraction="0.5">½ pot <kbd>B</kbd></button>
-                  <button class="size-button" type="button" data-pot-fraction="1">Pot</button>
-                  <button id="max-bet-button" class="size-button max-bet-button" type="button" aria-label="Set the maximum legal bet">Max</button>
+                <button id="call-check-button" class="action-button call-button" type="button" data-action="check">Check <kbd>Espaço</kbd></button>
+                <div id="size-presets" class="size-presets" aria-label="Opções de tamanho da aposta">
+                  <button class="size-button" type="button" data-pot-fraction="0.33">⅓ do pote</button>
+                  <button class="size-button selected" type="button" data-pot-fraction="0.5">½ do pote <kbd>B</kbd></button>
+                  <button class="size-button" type="button" data-pot-fraction="1">Pote</button>
+                  <button id="max-bet-button" class="size-button max-bet-button" type="button" aria-label="Definir a aposta máxima permitida">Máx.</button>
                 </div>
                 <label class="size-input-wrap" for="raise-to-input">
-                  <span id="raise-to-label">Bet to total</span>
+                  <span id="raise-to-label">Apostar até o total</span>
                   <input id="raise-to-input" type="number" inputmode="numeric" min="2" step="1" value="2">
                 </label>
-                <button id="bet-button" class="action-button bet-button" type="button" data-action="bet">Bet ½ pot</button>
+                <button id="bet-button" class="action-button bet-button" type="button" data-action="bet">Apostar ½ do pote</button>
                 <button id="all-in-button" class="action-button all-in-button" type="button" data-action="all_in">All-in</button>
               </div>
               <p id="bet-limit-note" class="bet-limit-note" aria-live="polite"></p>
@@ -110,80 +120,117 @@
             </div>
 
             <div id="coach-content">
-              <p id="coach-state" class="coach-state" role="status">Ready when you play</p>
+              <p id="coach-state" class="coach-state" role="status">Pronto para quando você jogar</p>
               <p id="coach-feedback" class="coach-feedback" role="status" aria-live="polite" hidden></p>
+              <section id="coach-hand-result" class="coach-hand-result" aria-labelledby="coach-hand-result-title" hidden>
+                <h3 id="coach-hand-result-title">Resultado da mão</h3>
+                <p id="coach-hand-result-summary" class="coach-hand-result-summary"></p>
+                <p id="coach-hand-result-detail" class="coach-hand-result-detail"></p>
+              </section>
               <div id="coach-empty" class="coach-empty">
                 <div class="decision-mark" aria-hidden="true"><span></span><span></span><span></span></div>
-                <h3>A guide for each decision</h3>
-                <p>When it is your turn, the coach walks through the spot, the poker idea, the numbers, and one question to carry forward.</p>
+                <h3>Um guia para cada decisão</h3>
+                <p>Na sua vez, o coach explica a situação, o conceito de poker, os números e uma pergunta para levar adiante.</p>
               </div>
 
               <div id="coach-snapshot" class="coach-snapshot" hidden>
-                <p id="call-assessment" class="call-assessment" data-assessment="no_call">No call to price</p>
-                <section id="coach-lesson" class="coach-lesson" aria-label="Guided decision lesson" hidden>
-                  <div class="coach-lesson-heading">
-                    <span id="lesson-label" class="lesson-label"></span>
-                    <span id="lesson-count" class="lesson-count"></span>
+                <section class="coach-explanation" aria-label="Explicação da decisão">
+                  <p id="call-assessment" class="call-assessment" data-assessment="no_call">Sem call para avaliar</p>
+                  <section id="coach-lesson" class="coach-lesson" aria-label="Lição guiada sobre a decisão" hidden>
+                    <ol id="lesson-progress" class="lesson-progress" aria-label="Etapas da análise"></ol>
+                    <div class="coach-lesson-heading">
+                      <span id="lesson-label" class="lesson-label"></span>
+                      <span id="lesson-count" class="lesson-count"></span>
+                    </div>
+                    <h3 id="lesson-title"></h3>
+                    <p id="lesson-body" aria-live="polite"></p>
+                    <nav class="lesson-navigation" aria-label="Etapas da lição sobre a decisão">
+                      <button id="lesson-previous" class="quiet-button" type="button" aria-label="Etapa anterior">Anterior</button>
+                      <button id="lesson-next" class="quiet-button" type="button" aria-label="Próxima etapa da lição">Próxima ideia</button>
+                    </nav>
+                  </section>
+                  <p id="coach-advice" class="coach-advice" hidden></p>
+                  <p id="coach-spr-warning" class="coach-spr-warning" hidden></p>
+                  <p id="coach-draws" class="coach-draws" hidden></p>
+                  <div id="bet-purpose" class="bet-purpose" hidden>
+                    <span id="bet-purpose-label"></span>
+                    <p id="bet-purpose-evidence"></p>
                   </div>
-                  <h3 id="lesson-title"></h3>
-                  <p id="lesson-body" aria-live="polite"></p>
-                  <nav class="lesson-navigation" aria-label="Decision lesson steps">
-                    <button id="lesson-previous" class="quiet-button" type="button" aria-label="Previous lesson step">Previous</button>
-                    <button id="lesson-next" class="quiet-button" type="button" aria-label="Next lesson step">Next idea</button>
-                  </nav>
                 </section>
-                <h3 class="coach-subheading">Numbers at a glance</h3>
-                <dl class="metric-list">
-                  <div><dt><span>Pot odds</span><small>Break-even equity for this call</small></dt><dd id="coach-pot-odds">—</dd></div>
-                  <div><dt><span>Estimated equity</span><small>Expected share across modeled outcomes</small></dt><dd id="coach-equity">—</dd></div>
-                  <div><dt><span>Call EV</span><small>Average chip result if the model repeats</small></dt><dd id="coach-ev">—</dd></div>
-                  <div><dt><span>SPR</span><small>Effective stack compared with the pot</small></dt><dd id="coach-spr">—</dd></div>
-                  <div><dt><span>Current hand</span><small>Best made hand under this variant’s rules</small></dt><dd id="coach-hand">—</dd></div>
-                </dl>
-                <p id="coach-advice" class="coach-advice" hidden></p>
-                <p id="coach-spr-warning" class="coach-spr-warning" hidden></p>
-                <p id="coach-draws" class="coach-draws" hidden></p>
-                <h3 id="coach-limitations-title" class="coach-subheading coach-limitations-title" hidden>What this estimate cannot know</h3>
-                <ul id="coach-limitations" class="coach-limitations" hidden></ul>
-                <div id="bet-purpose" class="bet-purpose" hidden>
-                  <span id="bet-purpose-label"></span>
-                  <p id="bet-purpose-evidence"></p>
-                </div>
-                <p id="coach-method" class="coach-method"></p>
+                <section class="coach-evidence" aria-label="Gráficos e números da decisão">
+                  <section class="coach-chart" aria-labelledby="equity-chart-title">
+                    <h3 id="equity-chart-title">Resultados simulados</h3>
+                    <div id="outcome-chart" class="outcome-chart" role="img" aria-label="Distribuição estimada de vitória, empate e derrota">
+                      <span id="outcome-win" class="outcome-segment outcome-win"></span>
+                      <span id="outcome-tie" class="outcome-segment outcome-tie"></span>
+                      <span id="outcome-loss" class="outcome-segment outcome-loss"></span>
+                    </div>
+                    <dl class="outcome-legend">
+                      <div><dt><i class="chart-key win-key"></i>Vitória</dt><dd id="outcome-win-value">—</dd></div>
+                      <div><dt><i class="chart-key tie-key"></i>Empate</dt><dd id="outcome-tie-value">—</dd></div>
+                      <div><dt><i class="chart-key loss-key"></i>Derrota</dt><dd id="outcome-loss-value">—</dd></div>
+                    </dl>
+                    <h3 class="equity-chart-heading">Equity e preço do call</h3>
+                    <div id="equity-chart" class="equity-chart" role="img" aria-label="Comparação entre a equity estimada e as pot odds">
+                      <span id="equity-fill" class="equity-fill"></span>
+                      <span id="equity-marker" class="equity-marker" aria-hidden="true"></span>
+                      <span id="pot-odds-marker" class="pot-odds-marker" aria-hidden="true"></span>
+                    </div>
+                    <div class="equity-axis"><span>0%</span><span>100%</span></div>
+                    <div class="equity-legend">
+                      <span><i class="chart-key equity-key"></i>Equity estimada <b id="chart-equity-value">—</b></span>
+                      <span id="pot-odds-legend"><i class="chart-key odds-key"></i>Pot odds <b id="chart-pot-odds-value">—</b></span>
+                    </div>
+                    <p id="chart-call-note" class="chart-call-note" hidden>Sem call para pagar nesta decisão.</p>
+                  </section>
+                  <section class="coach-numbers" aria-labelledby="coach-numbers-title">
+                    <h3 id="coach-numbers-title" class="coach-subheading">Números desta decisão</h3>
+                    <dl class="metric-list">
+                      <div><dt><span>Pot odds</span><small>Equity mínima para pagar</small></dt><dd id="coach-pot-odds">—</dd></div>
+                      <div><dt><span>Equity estimada</span><small>Fatia esperada nos resultados simulados</small></dt><dd id="coach-equity">—</dd></div>
+                      <div><dt><span>EV do call</span><small>Resultado médio em fichas se o modelo se repetir</small></dt><dd id="coach-ev">—</dd></div>
+                      <div><dt><span>SPR</span><small>Stack efetivo em relação ao pote</small></dt><dd id="coach-spr">—</dd></div>
+                      <div><dt><span>Mão atual</span><small>Melhor mão formada pelas regras desta modalidade</small></dt><dd id="coach-hand">—</dd></div>
+                    </dl>
+                  </section>
+                  <h3 id="coach-limitations-title" class="coach-subheading coach-limitations-title" hidden>O que esta estimativa não considera</h3>
+                  <ul id="coach-limitations" class="coach-limitations" hidden></ul>
+                  <p id="coach-method" class="coach-method"></p>
+                </section>
               </div>
             </div>
-            <p class="coach-footnote">Equity describes expected share, not the result of the next hand.</p>
+            <p class="coach-footnote">Equity representa a fatia esperada do pote, não o resultado da próxima mão.</p>
           </aside>
         </div>
 
         <section class="review-panel" aria-labelledby="review-title">
           <div class="review-heading">
             <div>
-              <h2 id="review-title">Session review</h2>
-              <p>Reconstruct a hand before judging the result.</p>
+              <h2 id="review-title">Revisão da sessão</h2>
+              <p>Reconstrua a mão antes de avaliar o resultado.</p>
             </div>
-            <button id="refresh-review" class="quiet-button" type="button">Refresh review</button>
+            <button id="refresh-review" class="quiet-button" type="button">Atualizar revisão</button>
           </div>
           <div class="review-layout">
             <div class="review-hands">
-              <h3>Recent hands</h3>
-              <p id="review-status" class="review-empty">Completed hands will appear here with cards, actions, and decision notes.</p>
+              <h3>Mãos recentes</h3>
+              <p id="review-status" class="review-empty">As mãos concluídas aparecerão aqui com cartas, ações e anotações sobre as decisões.</p>
               <ol id="hand-review-list" class="hand-review-list"></ol>
             </div>
             <div class="weekly-review">
-              <h3>Weekly study target</h3>
-              <p id="leak-study-target">Add reviewed hands to find a repeated decision worth studying.</p>
+              <h3>Meta de estudo da semana</h3>
+              <p id="leak-study-target">Revise algumas mãos para encontrar uma decisão recorrente que vale estudar.</p>
               <ul id="leak-flag-list" class="leak-flag-list"></ul>
               <ol id="weekly-plan" class="weekly-plan"></ol>
             </div>
           </div>
         </section>
 
-        <section class="stack-note" aria-label="Application stack">
-          <div><span class="stack-icon" aria-hidden="true">PY</span><span><strong>Python standard library</strong><small>Local server, no package setup</small></span></div>
+        <section class="stack-note" aria-label="Tecnologias da plataforma">
+          <div><span class="stack-icon" aria-hidden="true">PY</span><span><strong>Biblioteca padrão do Python</strong><small>Servidor local, sem instalar pacotes</small></span></div>
           <span class="note-divider" aria-hidden="true"></span>
-          <div><span class="stack-icon browser-icon" aria-hidden="true">&lt;/&gt;</span><span><strong>Native browser client</strong><small>HTML · CSS · JavaScript</small></span></div>
-          <span class="stack-caption">No third-party runtime required</span>
+          <div><span class="stack-icon browser-icon" aria-hidden="true">&lt;/&gt;</span><span><strong>Interface nativa do navegador</strong><small>HTML · CSS · JavaScript</small></span></div>
+          <span class="stack-caption">Sem dependências externas para executar</span>
         </section>
       </main>
     </div>
